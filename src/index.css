@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+.display-font { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; }
+.huge-font { font-family: 'Archivo Black', sans-serif; }
+.sans-font { font-family: 'Inter', sans-serif; }
