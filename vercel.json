@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/claude.ts": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/go/:channel", "destination": "/api/go?channel=:channel" }
+  ]
+}
