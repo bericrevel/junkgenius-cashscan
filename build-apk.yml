@@ -1,0 +1,66 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Generate native Android project
+        run: npx cap add android
+
+      - name: Generate icons and splash screens (when assets exist)
+        run: |
+          if [ -f assets/icon.png ]; then
+            npx capacitor-assets generate --android
+          else
+            echo "assets not uploaded yet - building with default icon"
+          fi
+
+      - name: Sync web build into native project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../cashscan.apk
+
+      - name: Publish APK to the permanent link
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: JunkGenius CashScan - newest build
+          prerelease: true
+          files: cashscan.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cashscan-debug-apk
+          path: cashscan.apk
+          retention-days: 14
