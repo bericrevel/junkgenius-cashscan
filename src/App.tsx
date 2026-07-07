@@ -68,7 +68,7 @@ function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; 
           <ChevronLeft size={22} className="text-mist" />
         </button>
       )}
-      <span className="font-disp font-bold text-lg text-white truncate">{title}</span>
+      <span className="font-disp font-bold text-lg chrome-text truncate">{title}</span>
       {right && <div className="ml-auto">{right}</div>}
     </div>
   );
@@ -420,7 +420,7 @@ export default function App() {
               <div className="core-content font-mono text-[11px] font-bold leading-tight">14K GOLD<br />RING</div>
             </div>
           </div>
-          <h1 className="font-disp font-bold text-[28px] text-white mt-8 text-center leading-tight">Scan anything.</h1>
+          <h1 className="font-disp font-bold text-[28px] chrome-text mt-8 text-center leading-tight">Scan anything.</h1>
           <div className="mt-3 font-mono text-[10.5px] tracking-widest uppercase text-abright border border-abright/30 bg-abright/[.06] rounded-full px-4 py-1.5">
             Point · Identify · Get paid
           </div>
@@ -442,8 +442,8 @@ export default function App() {
             <div className="px-6 pt-9 pb-5 flex items-center gap-3">
               <LogoMark size={34} />
               <div>
-                <div className="font-disp font-bold text-lg text-white leading-tight">
-                  Junk<span className="green-text">Genius</span>
+                <div className="font-disp font-bold text-lg chrome-text leading-tight">
+                  JunkGenius
                 </div>
                 <div className="text-[11px] text-faint">Point. Identify. Get paid.</div>
               </div>
@@ -598,7 +598,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               {photo && <img src={photo.previewUrl} alt={result.item} className="w-14 h-14 object-cover rounded-xl border border-white/10 flex-shrink-0" />}
               <div className="min-w-0">
-                <div className="font-disp font-bold text-lg text-white leading-tight">{result.item}</div>
+                <div className="font-disp font-bold text-lg chrome-text leading-tight">{result.item}</div>
                 <div className="text-[11px] text-faint mt-0.5">{result.condition || result.category}</div>
               </div>
             </div>
@@ -760,7 +760,7 @@ export default function App() {
             {isPro ? (
               <div className="flex flex-col items-center text-center gap-3 mt-8">
                 <div className="bezel rounded-full" style={{ width: 64, height: 64 }}><div className="bezel-face green"><Zap size={28} /></div></div>
-                <div className="font-disp font-bold text-2xl text-white">You're Pro. ⚡</div>
+                <div className="font-disp font-bold text-2xl chrome-text">You're Pro. ⚡</div>
                 <div className="text-sm text-faint max-w-xs">Unlimited scans and guides — and your few bucks keep this tool alive for the next person digging out. Thank you.</div>
                 <button onClick={resetScan} className="gbtn w-full max-w-xs py-4 mt-2 rounded-2xl font-disp font-bold text-lg"><span>SCAN SOMETHING</span></button>
                 <div className="cbtn w-full max-w-xs h-12">
@@ -774,7 +774,7 @@ export default function App() {
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <div className="bezel rounded-2xl" style={{ width: 48, height: 48 }}><div className="bezel-face green"><Zap size={22} /></div></div>
-                  <div className="font-disp font-bold text-xl text-white leading-tight">
+                  <div className="font-disp font-bold text-xl chrome-text leading-tight">
                     {gateReason === "cash" ? `JunkGenius helped you collect $${cash.toFixed(0)}.` : proGateActive ? `${AI_TRIGGER} AI actions on the house.` : "Free until it's made you $100."}
                   </div>
                 </div>
@@ -824,7 +824,7 @@ export default function App() {
       {cashModal && (
         <div className="fixed inset-0 bg-black/70 flex items-end z-50" onClick={() => setCashModal(null)}>
           <div className="w-full bg-ink2 border-t border-white/10 rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="font-disp font-bold text-xl text-white mb-1">{cashModal.as === "sold" ? "What'd it sell for?" : "What'd the yard pay?"}</div>
+            <div className="font-disp font-bold text-xl chrome-text mb-1">{cashModal.as === "sold" ? "What'd it sell for?" : "What'd the yard pay?"}</div>
             <div className="text-xs text-faint mb-3">Just the number — like 40 or 12.50</div>
             <input autoFocus value={cashPrice} onChange={(e) => setCashPrice(e.target.value)} placeholder="40" inputMode="decimal"
               className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3.5 text-lg text-white mb-2 outline-none focus:border-abright/50" />
