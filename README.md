@@ -1,4 +1,4 @@
-# JunkGenius · v0.1 (Phase 1 of the merge)
+# JunkGenius · v0.2 — the full merge
 
 Scan anything. Know what it's worth. Know what to do next.
 
@@ -60,31 +60,22 @@ Preferences like everything else personal, no account. Palettes live as
 read the same variables, so every `text-abright`-style usage follows the
 active finish automatically.
 
-## What's in Phase 1 (this build)
+## Everything is wired in (no phases)
 
-The exact five screens mocked and approved: **Onboarding, Home, Scan
-(multi-item), Verdict, Your Numbers (inventory), Pro** — fully wired to real
-data, no placeholders, fully reskinned in v4.1.
+Every feature from both predecessor apps is live in navigation, reskinned in
+the chrome/jewel-glass system, in all three finishes:
 
-**What's deliberately NOT wired into navigation yet:** Yards, Prices, Spots,
-Planner, Laws, Chat, Listing generator, Buyer triage, eBay comps. These are
-ScrapScout's proven, fully-functional features — the code is real and
-untouched in `src/screens/` and `src/lib/` — they're just not yet reskinned
-in the v4.1 chrome/emerald language. Shipping them in ScrapScout's old visual
-language inside JunkGenius would look like two different apps stitched
-together, which is worse than temporarily hiding a working feature. Phase 2
-reskins each and re-adds it to the tab bar.
-
-| Original feature (from ScrapScout / CashScan) | Status |
+| Feature (from ScrapScout / CashScan) | Status |
 |---|---|
-| Multi-item scan + dual valuation | **✓ Phase 1, rebuilt on Gemini** |
-| Repair/scrap/part-out guide | **✓ Phase 1, ported from CashScan, on Claude** |
-| Inventory + real-cash tracking | **✓ Phase 1** |
-| Pro gate (Stripe, fair two-trigger) | **✓ Phase 1** |
-| Yard finder, metal prices | Phase 2 — code exists, reskin pending |
-| My Spots, The Plan, Know the Rules | Phase 2 — code exists, reskin pending |
-| Ask the scout (chat), Listing generator, Buyer triage, eBay comps | Phase 2 — code exists, reskin pending |
-| Referral share, go-links | Phase 2 |
+| Multi-item scan + dual valuation | **✓ rebuilt on Gemini** |
+| Repair/scrap/part-out guide | **✓ ported from CashScan, on Claude** |
+| Inventory + real-cash tracking | **✓** |
+| Pro gate (Stripe two-trigger + owner FOUNDER_CODE unlock) | **✓** |
+| Yard finder (OpenStreetMap) + yard notes + logged prices | **✓ tab** |
+| Metal spot prices (real API or honest setup state) | **✓ tab** |
+| My Spots, The Plan, Know the Rules | **✓ home toolbox** |
+| Ask the scout (chat), Listing generator (+ real eBay asks), Buyer triage | **✓ home toolbox** |
+| Referral share | **✓ home** |
 
 ## Setup
 
@@ -133,6 +124,8 @@ Toolchain: Node 22+, Android Studio Otter+, Java 21 (Capacitor 8).
 
 ## Permissions
 
-None for Phase 1. `saveToGallery: false` means the Camera plugin needs no
-manifest entries. (Phase 2's Yards feature will need location permissions —
-documented when that phase reactivates.)
+`ACCESS_COARSE_LOCATION` + `ACCESS_FINE_LOCATION` — used only when you tap
+MY LOCATION on the Yards screen (typed city/ZIP search works without them;
+location permission is always optional). The build workflow injects them
+into the generated AndroidManifest. Camera needs no manifest entries
+(`saveToGallery: false`).
