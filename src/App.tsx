@@ -58,6 +58,34 @@ const AI_TRIGGER = 150;
 const PRICE_MONTHLY_LABEL = "$3.99 / month";
 const PRICE_ANNUAL_LABEL = "$24 / year";
 
+// ---- Finishes (themes) — chrome constant, glass color swaps. ----
+// Stored on this device only (Preferences), like everything else personal.
+// The palettes themselves live in src/index.css as [data-theme] variables;
+// the SWATCH gradients below are literal on purpose: each picker dot must
+// preview ITS OWN finish regardless of which finish is currently active.
+const THEME_KEY = "junkgenius:theme";
+type ThemeId = "emerald" | "sapphire" | "gold";
+const THEMES: Array<{ id: ThemeId; label: string; swatch: string }> = [
+  {
+    id: "emerald",
+    label: "Emerald",
+    swatch: "linear-gradient(155deg, rgba(52,211,153,.45), rgba(4,120,87,.75) 60%, rgba(2,44,34,.95)), #061913",
+  },
+  {
+    id: "sapphire",
+    label: "Sapphire",
+    swatch: "linear-gradient(155deg, rgba(96,165,250,.45), rgba(29,78,216,.75) 60%, rgba(23,37,84,.95)), #060B17",
+  },
+  {
+    id: "gold",
+    label: "Gold",
+    swatch: "linear-gradient(155deg, rgba(251,191,36,.45), rgba(180,83,9,.75) 60%, rgba(69,26,3,.95)), #170F04",
+  },
+];
+function isThemeId(v: unknown): v is ThemeId {
+  return v === "emerald" || v === "sapphire" || v === "gold";
+}
+
 type Screen = "onboarding" | "home" | "scan" | "verdict" | "guide" | "inventory" | "pro";
 
 function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; right?: React.ReactNode }) {
@@ -115,10 +143,30 @@ export default function App() {
   const [proError, setProError] = useState<string | null>(null);
   const [restoreEmail, setRestoreEmail] = useState("");
 
+  // ---- Finish (theme) ----
+  const [theme, setThemeState] = useState<ThemeId>("emerald");
+  const applyTheme = (t: ThemeId) => {
+    // "emerald" is the :root default; keeping the attribute off for it means
+    // even a pre-hydration flash renders in a valid finish.
+    if (t === "emerald") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+  };
+  const setTheme = (t: ThemeId) => {
+    setThemeState(t);
+    applyTheme(t);
+    setItem(THEME_KEY, t); // fire-and-forget; a lost write just means default next launch
+  };
+
   useEffect(() => {
     getItem(ONBOARD_KEY).then((v) => {
       if (!v) setScreen("onboarding");
       setCheckingOnboard(false);
+    });
+    getItem(THEME_KEY).then((v) => {
+      if (isThemeId(v)) {
+        setThemeState(v);
+        applyTheme(v);
+      }
     });
     loadInventory().then(setInventory);
     refreshEntitlement().then(setProState);
@@ -494,12 +542,12 @@ export default function App() {
               )}
 
               {isPro ? (
-                <div className="panel p-4" style={{ borderColor: "rgba(16,185,129,.35)" }}>
+                <div className="panel p-4" style={{ borderColor: "rgb(var(--a-500) / .35)" }}>
                   <div className="flex items-center gap-2 text-sm text-white font-semibold"><Zap size={15} className="green-text" /> JunkGenius Pro — active</div>
                   <button onClick={() => setScreen("pro")} className="text-xs text-faint underline mt-1">manage subscription</button>
                 </div>
               ) : proGateActive ? (
-                <div className="panel p-4" style={{ borderColor: "rgba(16,185,129,.35)" }}>
+                <div className="panel p-4" style={{ borderColor: "rgb(var(--a-500) / .35)" }}>
                   <div className="text-sm text-white font-semibold">
                     {gateReason === "cash" ? `You've collected $${cash.toFixed(0)} with JunkGenius. 🎉` : `You've used your ${AI_TRIGGER} free AI actions.`}
                   </div>
@@ -511,6 +559,41 @@ export default function App() {
                   Free AI actions used: <b className="text-mist">{aiCount} of {AI_TRIGGER}</b>. Free until $100 collected or {AI_TRIGGER} actions.
                 </div>
               ) : null}
+
+              {/* Finish picker — same watch, different crystal */}
+              <div className="panel p-4">
+                <div className="font-mono text-[10px] tracking-widest text-faint mb-3">FINISH</div>
+                <div className="flex items-stretch">
+                  {THEMES.map((t) => {
+                    const active = theme === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setTheme(t.id)}
+                        className="flex-1 flex flex-col items-center gap-1.5"
+                        aria-label={`${t.label} finish${active ? " (current)" : ""}`}
+                        aria-pressed={active}
+                      >
+                        <div
+                          className="bezel rounded-full"
+                          style={{
+                            width: 42,
+                            height: 42,
+                            ...(active ? { boxShadow: "0 0 0 2px rgba(255,255,255,.4), 0 2px 6px rgba(0,0,0,.5)" } : {}),
+                          }}
+                        >
+                          <div className="bezel-face" style={{ background: t.swatch, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {active && <Check size={15} color="#fff" strokeWidth={3} />}
+                          </div>
+                        </div>
+                        <span className={`font-mono text-[9px] tracking-widest ${active ? "text-white" : "text-faint"}`}>
+                          {t.label.toUpperCase()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="text-[11px] text-faint text-center pt-1">
                 Values are AI estimates — yards and buyers set real prices. Your inventory stays on this phone.
@@ -609,7 +692,7 @@ export default function App() {
                 <div className="font-mono font-extrabold text-xl text-white mt-1.5">${result.scrapLow}–${result.scrapHigh}</div>
                 {result.weightLbs > 0 && <div className="text-[10px] text-faint mt-1 flex items-center gap-1"><Weight size={10} /> ~{result.weightLbs} lbs</div>}
               </div>
-              <div className="flex-1 rounded-2xl p-3.5" style={{ background: "linear-gradient(180deg,rgba(16,185,129,.14),rgba(16,185,129,.02))", border: "1px solid rgba(16,185,129,.3)" }}>
+              <div className="flex-1 rounded-2xl p-3.5" style={{ background: "linear-gradient(180deg,rgb(var(--a-500) / .14),rgb(var(--a-500) / .02))", border: "1px solid rgb(var(--a-500) / .3)" }}>
                 <div className="font-mono text-[9px] tracking-widest uppercase text-faint">Resold whole</div>
                 <div className="font-mono font-extrabold text-xl green-text mt-1.5">${result.resaleLow}–${result.resaleHigh}</div>
                 <div className="text-[10px] text-faint mt-1">used market</div>
@@ -641,7 +724,7 @@ export default function App() {
             <div className="flex gap-2.5">
               <div className="cbtn flex-1 h-11"><button onClick={runGuide} className="cbtn-in w-full h-full flex items-center justify-center gap-2 text-xs"><Wrench size={14} /> Show me how</button></div>
               {savedIdx.has(activeIndex) ? (
-                <div className="flex-1 rounded-2xl h-11 flex items-center justify-center gap-2 text-xs font-bold" style={{ border: "1px solid rgba(16,185,129,.4)", color: "#34D399", background: "rgba(16,185,129,.06)" }}>
+                <div className="flex-1 rounded-2xl h-11 flex items-center justify-center gap-2 text-xs font-bold" style={{ border: "1px solid rgb(var(--a-500) / .4)", color: "rgb(var(--a-400))", background: "rgb(var(--a-500) / .06)" }}>
                   <Check size={14} /> IN INVENTORY
                 </div>
               ) : (
