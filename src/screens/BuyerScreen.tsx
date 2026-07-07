@@ -7,7 +7,7 @@ import { analyzeInventory, BuyerVerdict } from "../lib/scout";
 import type { InventoryItem } from "../lib/inventory";
 
 const VERDICT_STYLE: Record<BuyerVerdict["verdict"], { label: string; color: string; icon: typeof Tag }> = {
-  list_online: { label: "LIST IT", color: "#4ADE80", icon: Tag },
+  list_online: { label: "LIST IT", color: "rgb(var(--a-400))", icon: Tag },
   scrap_now: { label: "SCRAP NOW", color: "#60A5FA", icon: Recycle },
   either: { label: "EITHER WAY", color: "#FBBF24", icon: Scale },
 };
@@ -58,17 +58,17 @@ export default function BuyerScreen({ inventory, onDraftListing, onAiAction }: P
       </div>
 
       {onHand.length === 0 ? (
-        <div className="bg-panel border border-edge rounded-xl p-5 text-sm text-faint">
+        <div className="panel rounded-xl p-5 text-sm text-faint">
           Nothing on hand to triage. Scan items and add them to your inventory first.
         </div>
       ) : (
         <>
-          <div className="bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-mist">
+          <div className="panel rounded-xl px-4 py-3 text-sm text-mist">
             {onHand.length} item{onHand.length === 1 ? "" : "s"} on hand
           </div>
           {error && (
-            <div className="bg-panel border-2 border-alert rounded-xl p-3 text-sm flex gap-2">
-              <AlertTriangle size={16} className="flex-shrink-0" color="#F87171" />
+            <div className="panel border-2 border-rose/40 rounded-xl p-3 text-sm flex gap-2">
+              <AlertTriangle size={16} className="flex-shrink-0" color="#FB7185" />
               <span>{error}</span>
             </div>
           )}
@@ -76,8 +76,8 @@ export default function BuyerScreen({ inventory, onDraftListing, onAiAction }: P
             <button
               onClick={run}
               disabled={busy}
-              className="w-full py-4 rounded-xl term-font font-extrabold text-lg flex items-center justify-center gap-2 disabled:opacity-60"
-              style={{ background: "#4ADE80", color: "#0A0E1A" }}
+              className="w-full py-4 rounded-xl font-mono font-extrabold text-lg flex items-center justify-center gap-2 disabled:opacity-60"
+              style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
             >
               {busy ? <Loader2 size={18} className="animate-spin" /> : null} TRIAGE MY PILE
             </button>
@@ -93,11 +93,11 @@ export default function BuyerScreen({ inventory, onDraftListing, onAiAction }: P
               const Icon = style.icon;
               const invItem = findInventoryItem(v.item);
               return (
-                <div key={i} className="bg-panel border border-edge rounded-xl px-4 py-3">
+                <div key={i} className="panel rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm text-white font-medium truncate">{v.item}</div>
                     <div
-                      className="term-font text-[10px] font-bold tracking-wider px-2 py-1 rounded flex items-center gap-1 flex-shrink-0"
+                      className="font-mono text-[10px] font-bold tracking-wider px-2 py-1 rounded flex items-center gap-1 flex-shrink-0"
                       style={{ background: `${style.color}22`, color: style.color }}
                     >
                       <Icon size={11} /> {style.label}
@@ -107,8 +107,8 @@ export default function BuyerScreen({ inventory, onDraftListing, onAiAction }: P
                   {v.verdict !== "scrap_now" && invItem && (
                     <button
                       onClick={() => onDraftListing(invItem)}
-                      className="mt-2 px-3 py-1.5 rounded-lg term-font font-bold text-[11px]"
-                      style={{ background: "#4ADE80", color: "#0A0E1A" }}
+                      className="mt-2 px-3 py-1.5 rounded-lg font-mono font-bold text-[11px]"
+                      style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
                     >
                       DRAFT THE LISTING
                     </button>
@@ -120,7 +120,7 @@ export default function BuyerScreen({ inventory, onDraftListing, onAiAction }: P
           <button
             onClick={run}
             disabled={busy}
-            className="py-2.5 rounded-xl border border-edge text-sm text-mist flex items-center justify-center gap-2 disabled:opacity-50"
+            className="py-2.5 rounded-xl border border-white/10 text-sm text-mist flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : null} Re-run triage
           </button>
