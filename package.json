@@ -1,7 +1,7 @@
 {
   "name": "junkgenius",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "cap:sync": "npm run build && npx cap sync",
     "cap:android": "npm run cap:sync && npx cap open android",
-    "assets": "capacitor-assets generate --android"
+    "assets": "capacitor-assets generate --android",
+    "capacitor:sync:after": "node scripts/patch-manifest.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
