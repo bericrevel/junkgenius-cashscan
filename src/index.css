@@ -60,6 +60,28 @@
   --letters: linear-gradient(180deg, #EFF6FF 0%, #93C5FD 22%, #1D4ED8 44%, #172554 54%, #60A5FA 68%, #BFDBFE 82%, #1E3A8A 100%);
 }
 
+[data-theme="liberty"] {
+  /* Founders Edition exclusive — "Liberty." Old-Glory navy glass under the
+     same constant chrome, with a thin red glint band in the lettering.
+     Unlocked by a Founders purchase (one of 250, for America's 250th year)
+     or the owner code. */
+  --ink: 9 11 15;
+  --ink2: 13 16 22;
+  --panel-hi: #141924;
+  --panel-lo: #0a0d12;
+  --dark-hi: #161b26;
+  --dark-lo: #0c0f15;
+  --vf-bg: #0C1018;
+  --glass-base: #060A14;
+  --a-400: 143 174 224;
+  --a-500: 96 139 209;
+  --a-600: 58 105 183;
+  --a-700: 36 77 148;
+  --a-800: 26 55 108;
+  --a-950: 10 27 56;
+  --letters: linear-gradient(180deg, #F8FAFF 0%, #C7D7F2 20%, #24509A 42%, #B22234 50%, #0A1B38 58%, #8FAEE0 72%, #E8EFFA 84%, #1A3A6C 100%);
+}
+
 [data-theme="gold"] {
   --ink: 13 12 10;
   --ink2: 18 16 12;
