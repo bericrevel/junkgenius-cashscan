@@ -47,8 +47,8 @@ export default function YardMap({ center, yards, onSelect }: Props) {
         bounds.push([y.lat, y.lng]);
         L.circleMarker([y.lat, y.lng], {
           radius: 9,
-          color: "#4ADE80",
-          fillColor: "#4ADE80",
+          color: "rgb(var(--a-400))",
+          fillColor: "rgb(var(--a-400))",
           fillOpacity: 0.85,
           weight: 2,
         })
@@ -72,5 +72,5 @@ export default function YardMap({ center, yards, onSelect }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={divRef} className="w-full h-72 rounded-xl overflow-hidden border border-edge" />;
+  return <div ref={divRef} className="w-full h-72 rounded-xl overflow-hidden border border-white/10" />;
 }
