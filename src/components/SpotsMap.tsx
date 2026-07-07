@@ -32,8 +32,8 @@ export default function SpotsMap({ center, spots, onSelect }: Props) {
 
       L.circleMarker([center.lat, center.lng], {
         radius: 7,
-        color: "#B8C0CC",
-        fillColor: "#B8C0CC",
+        color: "#B9C4BE",
+        fillColor: "#B9C4BE",
         fillOpacity: 0.9,
       })
         .addTo(map)
@@ -64,5 +64,5 @@ export default function SpotsMap({ center, spots, onSelect }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={divRef} className="w-full h-72 rounded-xl overflow-hidden border border-edge" />;
+  return <div ref={divRef} className="w-full h-72 rounded-xl overflow-hidden border border-white/10" />;
 }
