@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from "react";
 import {
   Camera as CameraIcon,
   Loader2,
@@ -19,6 +19,25 @@ import {
   Zap,
   Settings,
   Sparkles,
+  MapPin,
+  Phone,
+  Navigation,
+  Globe,
+  Star,
+  Search,
+  LocateFixed,
+  Map as MapIcon,
+  List,
+  Clock,
+  TrendingUp,
+  NotebookPen,
+  MessageSquare,
+  Scale,
+  Tag,
+  Pin,
+  CalendarDays,
+  Landmark,
+  Share2,
 } from "lucide-react";
 import { App as CapApp } from "@capacitor/app";
 import type { PluginListenerHandle } from "@capacitor/core";
@@ -43,6 +62,27 @@ import {
   openPortal,
   isFounder,
 } from "./lib/pro";
+import { Browser } from "@capacitor/browser";
+import { Share } from "@capacitor/share";
+import { Place, getCachedPlace, cachePlace, locateMe, searchPlace } from "./lib/geo";
+import {
+  Yard,
+  YardNote,
+  findYards,
+  loadYardNotes,
+  saveYardNotes,
+  allLoggedPrices,
+} from "./lib/yards";
+import { getSpotPrices, SpotResult } from "./lib/prices";
+import type { ListingInput } from "./lib/scout";
+import ChatScreen from "./screens/ChatScreen";
+import ListingScreen from "./screens/ListingScreen";
+import BuyerScreen from "./screens/BuyerScreen";
+import SpotsScreen from "./screens/SpotsScreen";
+import PlannerScreen from "./screens/PlannerScreen";
+import LawsScreen from "./screens/LawsScreen";
+
+const YardMap = lazy(() => import("./components/YardMap"));
 
 // ---- Move styling — chrome/emerald identity ----
 const MOVES: Record<string, { label: string; sub: string }> = {
@@ -87,7 +127,38 @@ function isThemeId(v: unknown): v is ThemeId {
   return v === "emerald" || v === "sapphire" || v === "gold";
 }
 
-type Screen = "onboarding" | "home" | "scan" | "verdict" | "guide" | "inventory" | "pro";
+// Quick-pick chips for logging what a yard actually paid — the most honest
+// price data in the app (the user's own receipts, on-device only).
+const MATERIAL_CHIPS = [
+  "Copper #1",
+  "Copper #2",
+  "Insulated wire",
+  "Brass",
+  "Aluminum",
+  "Alu cans",
+  "Stainless",
+  "Light iron",
+  "Cast iron",
+  "Lead",
+];
+
+type Screen =
+  | "onboarding"
+  | "home"
+  | "scan"
+  | "verdict"
+  | "guide"
+  | "inventory"
+  | "yards"
+  | "yardDetail"
+  | "prices"
+  | "chat"
+  | "listing"
+  | "buyer"
+  | "spots"
+  | "planner"
+  | "laws"
+  | "pro";
 
 function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; right?: React.ReactNode }) {
   return (
@@ -145,6 +216,32 @@ export default function App() {
   const [restoreEmail, setRestoreEmail] = useState("");
   const [founder, setFounder] = useState(false);
 
+  // ---- Yards state (ported from ScrapScout — real OpenStreetMap data) ----
+  const [place, setPlace] = useState<Place | null>(null);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<Place[] | null>(null);
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const [yards, setYards] = useState<Yard[]>([]);
+  const [yardsLoading, setYardsLoading] = useState(false);
+  const [yardsError, setYardsError] = useState<string | null>(null);
+  const [yardsFetchedAt, setYardsFetchedAt] = useState<number | null>(null);
+  const [radius, setRadius] = useState(25);
+  const [showMap, setShowMap] = useState(false);
+  const [selectedYard, setSelectedYard] = useState<Yard | null>(null);
+  const [yardNotes, setYardNotes] = useState<Record<string, YardNote>>({});
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [logMaterial, setLogMaterial] = useState("");
+  const [logPrice, setLogPrice] = useState("");
+
+  // ---- Prices state ----
+  const [spot, setSpot] = useState<SpotResult | null>(null);
+  const [spotLoading, setSpotLoading] = useState(false);
+
+  // ---- Listing generator prefill (from buyer triage or the toolbox) ----
+  const [listingPrefill, setListingPrefill] = useState<ListingInput | null>(null);
+  const [listingSession, setListingSession] = useState(0);
+
   // ---- Finish (theme) ----
   const [theme, setThemeState] = useState<ThemeId>("emerald");
   const applyTheme = (t: ThemeId) => {
@@ -174,6 +271,8 @@ export default function App() {
     refreshEntitlement().then(setProState);
     loadAiCount().then(setAiCount);
     isFounder().then(setFounder);
+    loadYardNotes().then(setYardNotes);
+    getCachedPlace().then(setPlace);
   }, []);
 
   const screenRef = useRef<Screen>("home");
@@ -196,6 +295,7 @@ export default function App() {
       const s = screenRef.current;
       if (s === "guide") setScreen("verdict");
       else if (s === "verdict") resetScan();
+      else if (s === "yardDetail") setScreen("yards");
       else if (s === "home") CapApp.exitApp();
       else setScreen("home");
     }).then((h) => {
@@ -433,17 +533,175 @@ export default function App() {
     }
   };
 
+  // ---- Yards flow (ported from ScrapScout, unchanged logic) ----
+  const searchYards = useCallback(async (p: Place, r: number, force = false) => {
+    setYardsLoading(true);
+    setYardsError(null);
+    try {
+      const res = await findYards(p.lat, p.lng, r, { force });
+      setYards(res.yards);
+      setYardsFetchedAt(res.fetchedAt);
+    } catch (err) {
+      setYardsError(err instanceof Error ? err.message : "Couldn't load yards. Try again.");
+    } finally {
+      setYardsLoading(false);
+    }
+  }, []);
+
+  const openYards = () => {
+    setScreen("yards");
+    if (place && yards.length === 0 && !yardsLoading) {
+      searchYards(place, radius);
+    }
+  };
+
+  const useMyLocation = async () => {
+    setPlaceBusy(true);
+    setYardsError(null);
+    setPlaceResults(null);
+    try {
+      const p = await locateMe();
+      setPlace(p);
+      await searchYards(p, radius);
+    } catch (err) {
+      setYardsError(err instanceof Error ? err.message : "Couldn't get your location.");
+    } finally {
+      setPlaceBusy(false);
+    }
+  };
+
+  const runPlaceSearch = async () => {
+    if (!placeQuery.trim()) return;
+    setPlaceBusy(true);
+    setYardsError(null);
+    try {
+      const results = await searchPlace(placeQuery);
+      if (results.length === 0) {
+        setYardsError("Couldn't find that place. Try a city name or ZIP.");
+        setPlaceResults(null);
+      } else {
+        setPlaceResults(results);
+      }
+    } catch (err) {
+      setYardsError(err instanceof Error ? err.message : "Search failed. Try again.");
+    } finally {
+      setPlaceBusy(false);
+    }
+  };
+
+  const pickPlace = async (p: Place) => {
+    setPlace(p);
+    setPlaceResults(null);
+    setPlaceQuery("");
+    await cachePlace(p);
+    await searchYards(p, radius);
+  };
+
+  const widenSearch = () => {
+    const r = 50;
+    setRadius(r);
+    if (place) searchYards(place, r);
+  };
+
+  const openYardDetail = (y: Yard) => {
+    setSelectedYard(y);
+    setNoteDraft(yardNotes[y.id]?.note || "");
+    setNoteSaved(false);
+    setLogMaterial("");
+    setLogPrice("");
+    setScreen("yardDetail");
+  };
+
+  const saveNote = async () => {
+    if (!selectedYard) return;
+    const next = {
+      ...yardNotes,
+      [selectedYard.id]: {
+        ...(yardNotes[selectedYard.id] || { prices: [] }),
+        note: noteDraft,
+        name: selectedYard.name,
+      },
+    };
+    setYardNotes(next);
+    setNoteSaved(true);
+    setTimeout(() => setNoteSaved(false), 1500);
+    await saveYardNotes(next);
+  };
+
+  const cleanedLog = logPrice.replace(/[^0-9.]/g, "");
+  const parsedLog = parseFloat(cleanedLog);
+  const logValid = cleanedLog !== "" && Number.isFinite(parsedLog) && parsedLog >= 0 && logMaterial.trim() !== "";
+
+  const logYardPrice = async () => {
+    if (!selectedYard || !logValid) return;
+    const existing = yardNotes[selectedYard.id] || { note: "", prices: [] };
+    const next = {
+      ...yardNotes,
+      [selectedYard.id]: {
+        ...existing,
+        name: selectedYard.name,
+        prices: [{ material: logMaterial.trim(), perLb: parsedLog, date: Date.now() }, ...(existing.prices || [])],
+      },
+    };
+    setYardNotes(next);
+    setLogMaterial("");
+    setLogPrice("");
+    await saveYardNotes(next);
+  };
+
+  // ---- Prices flow ----
+  const loadSpot = async (force = false) => {
+    setSpotLoading(true);
+    const res = await getSpotPrices({ force });
+    setSpot(res);
+    setSpotLoading(false);
+  };
+
+  const openPrices = () => {
+    setScreen("prices");
+    if (!spot && !spotLoading) loadSpot();
+  };
+
+  const myPrices = allLoggedPrices(yardNotes, (id) => yardNotes[id]?.name || "a yard");
+
+  const openExternal = (url: string) => Browser.open({ url });
+
+  /** Route to an AI screen, or to the Pro pitch when the gate is active. */
+  const openGated = (go: () => void) => {
+    if (proGateActive) setScreen("pro");
+    else go();
+  };
+
+  // ---- Toolbox navigation ----
+  const openListingFor = (input: ListingInput | null) => {
+    setListingPrefill(input);
+    setListingSession((n) => n + 1);
+    setScreen("listing");
+  };
+
+  const draftFromInventory = (i: InventoryItem) =>
+    openListingFor({
+      item: i.item,
+      category: i.category,
+      resaleLow: i.resaleLow,
+      resaleHigh: i.resaleHigh,
+    });
+
   const TabBar = () => (
     <div className="flex border-t border-white/[.06] bg-ink2/60 backdrop-blur relative z-10">
       {(
         [
           { id: "home", label: "Home", icon: HomeIcon, go: () => setScreen("home") },
           { id: "scan", label: "Scan", icon: ScanLine, go: resetScan },
+          { id: "yards", label: "Yards", icon: MapPin, go: openYards },
+          { id: "prices", label: "Prices", icon: TrendingUp, go: openPrices },
           { id: "inventory", label: "Items", icon: Boxes, go: () => setScreen("inventory") },
-          { id: "pro", label: "Pro", icon: Zap, go: () => setScreen("pro") },
         ] as const
       ).map((t) => {
-        const active = screen === t.id || (t.id === "scan" && (screen === "verdict" || screen === "guide"));
+        const active =
+          screen === t.id ||
+          (t.id === "scan" && (screen === "verdict" || screen === "guide")) ||
+          (t.id === "yards" && screen === "yardDetail");
         const Icon = t.icon;
         return (
           <button key={t.id} onClick={t.go} className="flex-1 flex flex-col items-center gap-1 py-2.5">
@@ -545,6 +803,32 @@ export default function App() {
                 </div>
               )}
 
+              {/* Toolbox — every ScrapScout tool, chrome/glass tiles */}
+              <div>
+                <div className="font-mono text-[10px] tracking-widest text-faint mb-2">TOOLBOX</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {(
+                    [
+                      { icon: MessageSquare, title: "Ask the scout", sub: "grades, yard runs, safety", go: () => openGated(() => setScreen("chat")) },
+                      { icon: Scale, title: "Triage my pile", sub: "list it vs scrap it now", go: () => openGated(() => setScreen("buyer")) },
+                      { icon: Pin, title: "My spots", sub: "your pins + free-stuff launchers", go: () => setScreen("spots") },
+                      { icon: CalendarDays, title: "The plan", sub: "curb days, runs, reminders", go: () => setScreen("planner") },
+                      { icon: Landmark, title: "Know the rules", sub: "ID, cats, curb law, never-scrap list", go: () => setScreen("laws") },
+                      { icon: Tag, title: "Draft a listing", sub: "ad copy + real eBay asks", go: () => openGated(() => openListingFor(null)) },
+                    ] as const
+                  ).map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <button key={t.title} onClick={t.go} className="panel p-4 text-left">
+                        <Icon size={18} style={{ color: "rgb(var(--a-400))" }} />
+                        <div className="text-sm text-white font-semibold mt-2">{t.title}</div>
+                        <div className="text-[11px] text-faint mt-0.5">{t.sub}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {isPro ? (
                 <div className="panel p-4" style={{ borderColor: "rgb(var(--a-500) / .35)" }}>
                   <div className="flex items-center gap-2 text-sm text-white font-semibold"><Zap size={15} className="green-text" /> JunkGenius Pro — active</div>
@@ -555,7 +839,7 @@ export default function App() {
                   <div className="text-sm text-white font-semibold">
                     {gateReason === "cash" ? `You've collected $${cash.toFixed(0)} with JunkGenius. 🎉` : `You've used your ${AI_TRIGGER} free AI actions.`}
                   </div>
-                  <div className="text-xs text-faint mt-1">The free deal was $100 collected or {AI_TRIGGER} AI actions. Your inventory stays free forever either way.</div>
+                  <div className="text-xs text-faint mt-1">The free deal was $100 collected or {AI_TRIGGER} AI actions. Your inventory, pins, plan, yards, and prices stay free forever either way.</div>
                   <button onClick={() => setScreen("pro")} className="gbtn mt-3 w-full py-2.5 rounded-xl font-disp font-bold text-sm"><span>SEE PRO</span></button>
                 </div>
               ) : aiCount >= Math.floor(AI_TRIGGER / 2) ? (
@@ -599,8 +883,24 @@ export default function App() {
                 </div>
               </div>
 
+              <button
+                onClick={() =>
+                  Share.share({
+                    title: "JunkGenius",
+                    text: "Scan junk for scrap + resale value, find yards, get paid. Free until it's made you $100.",
+                    url: "https://github.com/bericrevel/junkgenius-cashscan/releases/latest",
+                  }).catch(() => {})
+                }
+                className="w-full py-3 rounded-xl border border-white/10 text-mist text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <Share2 size={14} /> Tell another scrapper
+              </button>
+
               <div className="text-[11px] text-faint text-center pt-1">
-                Values are AI estimates — yards and buyers set real prices. Your inventory stays on this phone.
+                Values are AI estimates — yards and buyers set real prices. Your inventory stays on this phone. ·{" "}
+                <button onClick={() => openExternal(`${import.meta.env.VITE_API_BASE_URL || "https://junkgenius-cashscan.vercel.app"}/privacy.html`)} className="underline">
+                  privacy
+                </button>
               </div>
             </div>
           </div>
@@ -784,6 +1084,474 @@ export default function App() {
       )}
 
       {/* ============ INVENTORY / NUMBERS ============ */}
+      {screen === "yards" && (
+        <>
+          <TopBar title="Yards Near You" onBack={() => setScreen("home")} />
+          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+            {/* Location chooser — GPS or typed, both honest paths */}
+            <div className="flex gap-2">
+              <button
+                onClick={useMyLocation}
+                disabled={placeBusy || yardsLoading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-mono font-bold text-xs disabled:opacity-50"
+                style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
+              >
+                {placeBusy ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
+                MY LOCATION
+              </button>
+              <div className="flex-1 flex gap-2">
+                <input
+                  value={placeQuery}
+                  onChange={(e) => setPlaceQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && runPlaceSearch()}
+                  placeholder="city or ZIP"
+                  className="min-w-0 flex-1 panel rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
+                />
+                <button
+                  onClick={runPlaceSearch}
+                  disabled={placeBusy || !placeQuery.trim()}
+                  className="px-3 rounded-xl border border-white/10 disabled:opacity-40"
+                  aria-label="Search place"
+                >
+                  <Search size={16} color="#B9C4BE" />
+                </button>
+              </div>
+            </div>
+
+            {placeResults && (
+              <div className="flex flex-col gap-1.5">
+                {placeResults.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => pickPlace(p)}
+                    className="text-left panel rounded-xl px-4 py-2.5 text-sm text-mist"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {place && (
+              <div className="flex items-center justify-between text-xs text-faint">
+                <span className="truncate">
+                  Near <b className="text-mist">{place.label}</b> · {radius} mi
+                </span>
+                {yardsFetchedAt && (
+                  <button onClick={() => place && searchYards(place, radius, true)} className="underline flex-shrink-0 ml-2">
+                    refresh
+                  </button>
+                )}
+              </div>
+            )}
+
+            {yardsError && (
+              <div className="panel border-2 border-rose/40 rounded-xl p-3.5 text-sm flex gap-2">
+                <AlertTriangle size={17} className="flex-shrink-0" color="#FB7185" />
+                <span>{yardsError}</span>
+              </div>
+            )}
+
+            {yardsLoading && (
+              <div className="flex flex-col items-center gap-3 py-10">
+                <Loader2 size={32} className="animate-spin" color="rgb(var(--a-400))" />
+                <div className="font-mono text-xs tracking-widest text-faint">SEARCHING OPENSTREETMAP...</div>
+              </div>
+            )}
+
+            {!place && !yardsLoading && !placeResults && (
+              <div className="panel rounded-xl p-5 text-sm text-faint">
+                Pick a location — tap <b className="text-mist">MY LOCATION</b> or type a city/ZIP.
+                Yards come from real OpenStreetMap data.
+              </div>
+            )}
+
+            {place && !yardsLoading && yards.length > 0 && (
+              <>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowMap(false)}
+                    className="flex-1 py-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 border"
+                    style={
+                      !showMap
+                        ? { background: "rgba(255,255,255,.07)", color: "rgb(var(--a-400))", borderColor: "rgb(var(--a-400) / .5)" }
+                        : { color: "#7C8983", borderColor: "rgba(255,255,255,.12)" }
+                    }
+                  >
+                    <List size={13} /> LIST
+                  </button>
+                  <button
+                    onClick={() => setShowMap(true)}
+                    className="flex-1 py-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 border"
+                    style={
+                      showMap
+                        ? { background: "rgba(255,255,255,.07)", color: "rgb(var(--a-400))", borderColor: "rgb(var(--a-400) / .5)" }
+                        : { color: "#7C8983", borderColor: "rgba(255,255,255,.12)" }
+                    }
+                  >
+                    <MapIcon size={13} /> MAP
+                  </button>
+                </div>
+
+                {showMap && (
+                  <Suspense
+                    fallback={
+                      <div className="w-full h-72 rounded-xl border border-white/10 flex items-center justify-center">
+                        <Loader2 size={24} className="animate-spin" color="rgb(var(--a-400))" />
+                      </div>
+                    }
+                  >
+                    <YardMap key={`${place.lat},${place.lng},${yards.length}`} center={place} yards={yards} onSelect={openYardDetail} />
+                  </Suspense>
+                )}
+
+                {!showMap && (
+                  <div className="flex flex-col gap-2">
+                    {yards.map((y) => (
+                      <button
+                        key={y.id}
+                        onClick={() => openYardDetail(y)}
+                        className="text-left panel rounded-xl px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm text-white font-semibold truncate">{y.name}</div>
+                          <div className="font-mono text-xs flex-shrink-0" style={{ color: "rgb(var(--a-400))" }}>
+                            {y.miles} mi
+                          </div>
+                        </div>
+                        <div className="text-xs text-faint mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>{y.kind}</span>
+                          {y.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone size={10} /> yes
+                            </span>
+                          )}
+                          {y.hours && (
+                            <span className="flex items-center gap-1 truncate">
+                              <Clock size={10} /> {y.hours.slice(0, 28)}
+                            </span>
+                          )}
+                          {yardNotes[y.id]?.note && (
+                            <span className="flex items-center gap-1" style={{ color: "#FBBF24" }}>
+                              <NotebookPen size={10} /> note
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {radius === 25 && (
+                  <button onClick={widenSearch} className="py-2.5 rounded-xl border border-white/10 text-sm text-mist">
+                    Search wider — 50 mi
+                  </button>
+                )}
+                <div className="text-[11px] text-faint text-center pb-3">
+                  Data © OpenStreetMap contributors. OSM doesn't list every yard — ask around
+                  locally too.
+                </div>
+              </>
+            )}
+
+            {place && !yardsLoading && !yardsError && yards.length === 0 && yardsFetchedAt && (
+              <div className="panel rounded-xl p-5 text-sm text-faint flex flex-col gap-3">
+                <span>
+                  <b className="text-mist">No yards mapped within {radius} mi</b> on OpenStreetMap.
+                  That doesn't mean there are none — OSM coverage varies by county. Ask at the
+                  hardware store, or search a nearby city.
+                </span>
+                {radius === 25 && (
+                  <button
+                    onClick={widenSearch}
+                    className="self-start px-4 py-2 rounded-lg font-mono font-bold text-xs"
+                    style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
+                  >
+                    SEARCH 50 MI
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ YARD DETAIL ============ */}
+      {screen === "yardDetail" && selectedYard && (
+        <>
+          <TopBar title={selectedYard.name} onBack={() => setScreen("yards")} />
+          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+            <div className="text-xs text-faint">
+              {selectedYard.kind} · {selectedYard.miles} mi away
+              {selectedYard.address ? ` · ${selectedYard.address}` : ""}
+            </div>
+            {selectedYard.hours && (
+              <div className="panel rounded-xl px-4 py-3 text-sm flex items-start gap-2">
+                <Clock size={15} className="flex-shrink-0 mt-0.5" color="rgb(var(--a-400))" />
+                <span className="text-mist">{selectedYard.hours}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {selectedYard.phone && (
+                <button
+                  onClick={() => {
+                    window.location.href = `tel:${selectedYard.phone}`;
+                  }}
+                  className="py-3 rounded-xl font-mono font-bold text-sm flex items-center justify-center gap-2"
+                  style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
+                >
+                  <Phone size={15} /> CALL
+                </button>
+              )}
+              <button
+                onClick={() =>
+                  openExternal(
+                    `https://www.google.com/maps/dir/?api=1&destination=${selectedYard.lat},${selectedYard.lng}`
+                  )
+                }
+                className="py-3 rounded-xl font-mono font-bold text-sm flex items-center justify-center gap-2 border"
+                style={{ borderColor: "rgb(var(--a-400) / .5)", color: "rgb(var(--a-400))" }}
+              >
+                <Navigation size={15} /> DIRECTIONS
+              </button>
+              <button
+                onClick={() =>
+                  openExternal(
+                    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      `${selectedYard.name} ${selectedYard.lat},${selectedYard.lng}`
+                    )}`
+                  )
+                }
+                className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-white/10 text-mist"
+              >
+                <Star size={15} /> Reviews on Google
+              </button>
+              {selectedYard.website && (
+                <button
+                  onClick={() => openExternal(selectedYard.website!)}
+                  className="py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border border-white/10 text-mist"
+                >
+                  <Globe size={15} /> Website
+                </button>
+              )}
+            </div>
+
+            {!selectedYard.phone && (
+              <div className="text-xs text-faint -mt-1">
+                No phone listed on OpenStreetMap for this one — check its Google listing.
+              </div>
+            )}
+
+            {/* My note — real user data, on-device */}
+            <div>
+              <div className="font-mono text-[10px] tracking-widest text-faint mb-2">MY NOTE</div>
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                rows={3}
+                placeholder="Gate hours, who to ask for, what they're picky about..."
+                className="w-full panel rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-abright/50 resize-none"
+              />
+              <button
+                onClick={saveNote}
+                className="mt-2 px-4 py-2 rounded-lg font-mono font-bold text-xs flex items-center gap-2"
+                style={
+                  noteSaved
+                    ? { background: "rgb(var(--a-400) / .15)", color: "rgb(var(--a-400))" }
+                    : { background: "rgb(var(--a-400))", color: "#0A0D0C" }
+                }
+              >
+                {noteSaved ? (
+                  <>
+                    <Check size={13} /> SAVED
+                  </>
+                ) : (
+                  "SAVE NOTE"
+                )}
+              </button>
+            </div>
+
+            {/* What THIS yard paid me — the most honest price data there is */}
+            <div>
+              <div className="font-mono text-[10px] tracking-widest text-faint mb-2">WHAT THEY PAID ME ($/LB)</div>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {MATERIAL_CHIPS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setLogMaterial(m)}
+                    className="px-2.5 py-1 rounded-full text-[11px] border"
+                    style={
+                      logMaterial === m
+                        ? { borderColor: "rgb(var(--a-400) / .5)", color: "rgb(var(--a-400))" }
+                        : { borderColor: "rgba(255,255,255,.12)", color: "#7C8983" }
+                    }
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={logMaterial}
+                  onChange={(e) => setLogMaterial(e.target.value)}
+                  placeholder="material"
+                  className="min-w-0 flex-1 panel rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
+                />
+                <input
+                  value={logPrice}
+                  onChange={(e) => setLogPrice(e.target.value)}
+                  placeholder="$/lb"
+                  inputMode="decimal"
+                  className="w-24 panel rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
+                />
+                <button
+                  onClick={logYardPrice}
+                  disabled={!logValid}
+                  className="px-3.5 rounded-xl font-mono font-bold text-xs disabled:opacity-40"
+                  style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
+                >
+                  LOG
+                </button>
+              </div>
+              {(yardNotes[selectedYard.id]?.prices || []).length > 0 && (
+                <div className="flex flex-col gap-1.5 mt-3">
+                  {(yardNotes[selectedYard.id]?.prices || []).slice(0, 10).map((p, i) => (
+                    <div key={i} className="flex justify-between text-sm panel rounded-lg px-3 py-2">
+                      <span className="text-mist">{p.material}</span>
+                      <span className="font-mono text-white">
+                        ${p.perLb.toFixed(2)}/lb{" "}
+                        <span className="text-faint text-xs">{new Date(p.date).toLocaleDateString()}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="text-[11px] text-faint text-center pb-3">
+              Notes and logged prices live on this phone only.
+            </div>
+          </div>
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ PRICES ============ */}
+      {screen === "prices" && (
+        <>
+          <TopBar title="Metal Prices" onBack={() => setScreen("home")} />
+          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+            {/* Spot section — real API or honest setup state */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-mono text-[10px] tracking-widest text-faint">EXCHANGE SPOT</div>
+                {spot?.state === "ok" && (
+                  <button
+                    onClick={() => loadSpot(true)}
+                    disabled={spotLoading}
+                    className="text-xs text-faint underline disabled:opacity-40"
+                  >
+                    refresh
+                  </button>
+                )}
+              </div>
+
+              {spotLoading && !spot && (
+                <div className="flex justify-center py-8">
+                  <Loader2 size={28} className="animate-spin" color="rgb(var(--a-400))" />
+                </div>
+              )}
+
+              {spot?.state === "setup" && (
+                <div className="panel rounded-xl p-4 text-sm text-faint flex flex-col gap-2">
+                  <div className="text-white font-semibold">Spot prices aren't connected yet.</div>
+                  <span>
+                    They need a one-time free API key on the server (see README →{" "}
+                    <span className="font-mono text-xs">METALPRICE_API_KEY</span>). No fake numbers
+                    here in the meantime — log what <b className="text-mist">your</b> yard pays below;
+                    that's the number that actually matters.
+                  </span>
+                </div>
+              )}
+
+              {spot?.state === "error" && (
+                <div className="panel border-2 border-rose/40 rounded-xl p-3.5 text-sm flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <AlertTriangle size={17} className="flex-shrink-0" color="#FB7185" />
+                    <span>{spot.message}</span>
+                  </div>
+                  <button
+                    onClick={() => loadSpot(true)}
+                    className="self-start px-4 py-1.5 rounded-lg font-mono font-bold text-xs"
+                    style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
+                  >
+                    TRY AGAIN
+                  </button>
+                </div>
+              )}
+
+              {spot?.state === "ok" && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    {spot.prices.map((p) => (
+                      <div key={p.symbol} className="flex justify-between items-center panel rounded-lg px-4 py-2.5">
+                        <span className="text-sm text-white">{p.name}</span>
+                        <span className="font-mono text-sm" style={{ color: "rgb(var(--a-400))" }}>
+                          ${p.price.toFixed(2)}
+                          <span className="text-faint text-xs">/{p.unit}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-faint mt-2">
+                    Spot via metalpriceapi.com
+                    {spot.fetchedAt ? ` · as of ${new Date(spot.fetchedAt).toLocaleString()}` : ""}
+                    {spot.stale ? " · cached (couldn't refresh)" : ""}
+                  </div>
+                  <div className="panel rounded-xl px-4 py-3 text-xs text-faint mt-2">
+                    <b className="text-mist">Yards pay under spot — usually 30–60% under</b> — and
+                    set their own prices day to day. Call ahead. Brass, steel, and insulated wire
+                    aren't exchange metals at all: for those, your logged yard prices below are the
+                    real data.
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* My yard prices — the user's own real numbers */}
+            <div>
+              <div className="font-mono text-[10px] tracking-widest text-faint mb-2">WHAT MY YARDS PAID ($/LB)</div>
+              {myPrices.length === 0 ? (
+                <div className="panel rounded-xl p-4 text-sm text-faint">
+                  Nothing logged yet. When a yard pays you, log the $/lb on that yard's page —
+                  your own numbers beat any spot feed.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {myPrices.slice(0, 20).map((p, i) => (
+                    <div key={i} className="panel rounded-lg px-4 py-2.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-white">{p.material}</span>
+                        <span className="font-mono" style={{ color: "rgb(var(--a-400))" }}>
+                          ${p.perLb.toFixed(2)}/lb
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-faint mt-0.5">
+                        {p.yardName} · {new Date(p.date).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ INVENTORY ============ */}
       {screen === "inventory" && (
         <>
           <TopBar title="Your Numbers" onBack={() => setScreen("home")} />
@@ -835,6 +1603,60 @@ export default function App() {
             )}
             <div className="text-[11px] text-faint text-center pb-4">Your inventory lives on this phone only. We can't see it.</div>
           </div>
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ ASK THE SCOUT (CHAT) ============ */}
+      {screen === "chat" && (
+        <>
+          <TopBar title="Ask the Scout" onBack={() => setScreen("home")} />
+          <ChatScreen onAiAction={onAiAction} />
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ LISTING GENERATOR ============ */}
+      {screen === "listing" && (
+        <>
+          <TopBar title="Draft a Listing" onBack={() => setScreen("home")} />
+          <ListingScreen key={listingSession} inventory={inventory} prefill={listingPrefill} onAiAction={onAiAction} />
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ BUYER TRIAGE ============ */}
+      {screen === "buyer" && (
+        <>
+          <TopBar title="Triage My Pile" onBack={() => setScreen("home")} />
+          <BuyerScreen inventory={inventory} onDraftListing={draftFromInventory} onAiAction={onAiAction} />
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ MY SPOTS ============ */}
+      {screen === "spots" && (
+        <>
+          <TopBar title="My Spots" onBack={() => setScreen("home")} />
+          <SpotsScreen />
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ THE PLAN ============ */}
+      {screen === "planner" && (
+        <>
+          <TopBar title="The Plan" onBack={() => setScreen("home")} />
+          <PlannerScreen />
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ KNOW THE RULES ============ */}
+      {screen === "laws" && (
+        <>
+          <TopBar title="Know the Rules" onBack={() => setScreen("home")} />
+          <LawsScreen onAskScout={() => openGated(() => setScreen("chat"))} />
           <TabBar />
         </>
       )}
