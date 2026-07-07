@@ -128,8 +128,8 @@ export default function SpotsScreen() {
       </div>
 
       {error && (
-        <div className="bg-panel border-2 border-alert rounded-xl p-3 text-sm flex gap-2">
-          <AlertTriangle size={16} className="flex-shrink-0" color="#F87171" />
+        <div className="panel border-2 border-rose/40 rounded-xl p-3 text-sm flex gap-2">
+          <AlertTriangle size={16} className="flex-shrink-0" color="#FB7185" />
           <span>{error}</span>
         </div>
       )}
@@ -138,17 +138,17 @@ export default function SpotsScreen() {
       {!adding ? (
         <button
           onClick={() => setAdding(true)}
-          className="w-full py-3.5 rounded-xl term-font font-extrabold text-base flex items-center justify-center gap-2"
-          style={{ background: "#4ADE80", color: "#0A0E1A" }}
+          className="w-full py-3.5 rounded-xl font-mono font-extrabold text-base flex items-center justify-center gap-2"
+          style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
         >
           <Plus size={17} /> DROP A PIN
         </button>
       ) : (
-        <div className="bg-panel border border-edge rounded-xl p-4 flex flex-col gap-3">
+        <div className="panel rounded-xl p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="term-font text-[10px] tracking-widest text-faint">NEW SPOT</div>
+            <div className="font-mono text-[10px] tracking-widest text-faint">NEW SPOT</div>
             <button onClick={() => setAdding(false)} aria-label="Cancel">
-              <X size={16} color="#7A8494" />
+              <X size={16} color="#7C8983" />
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -160,7 +160,7 @@ export default function SpotsScreen() {
                 style={
                   pinType === t
                     ? { borderColor: SPOT_META[t].color, color: SPOT_META[t].color }
-                    : { borderColor: "#1F2937", color: "#7A8494" }
+                    : { borderColor: "rgba(255,255,255,.12)", color: "#7C8983" }
                 }
               >
                 {SPOT_META[t].label}
@@ -171,13 +171,13 @@ export default function SpotsScreen() {
             value={pinLabel}
             onChange={(e) => setPinLabel(e.target.value)}
             placeholder="label (e.g. blue house on Rt 9)"
-            className="w-full bg-ink border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout"
+            className="w-full bg-ink border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
           />
           <input
             value={pinNote}
             onChange={(e) => setPinNote(e.target.value)}
             placeholder="note (optional)"
-            className="w-full bg-ink border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout"
+            className="w-full bg-ink border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
           />
           {(pinType === "estate" || pinType === "garage") && (
             <label className="flex items-center gap-2 text-xs text-faint">
@@ -186,15 +186,15 @@ export default function SpotsScreen() {
                 type="datetime-local"
                 value={pinDate}
                 onChange={(e) => setPinDate(e.target.value)}
-                className="flex-1 bg-ink border border-edge rounded-lg px-2 py-2 text-xs text-white outline-none focus:border-scout"
+                className="flex-1 bg-ink border border-white/10 rounded-lg px-2 py-2 text-xs text-white outline-none focus:border-abright/50"
               />
             </label>
           )}
           <button
             onClick={addAtMyLocation}
             disabled={pinBusy}
-            className="w-full py-3 rounded-xl term-font font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ background: "#4ADE80", color: "#0A0E1A" }}
+            className="w-full py-3 rounded-xl font-mono font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
           >
             {pinBusy ? <Loader2 size={15} className="animate-spin" /> : <LocateFixed size={15} />}
             PIN AT MY LOCATION
@@ -205,15 +205,15 @@ export default function SpotsScreen() {
               onChange={(e) => setPinPlaceQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addAtSearchedPlace()}
               placeholder="or type an address / cross street"
-              className="min-w-0 flex-1 bg-ink border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout"
+              className="min-w-0 flex-1 bg-ink border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
             />
             <button
               onClick={addAtSearchedPlace}
               disabled={pinBusy || !pinPlaceQuery.trim()}
-              className="px-3 rounded-xl border border-edge disabled:opacity-40"
+              className="px-3 rounded-xl border border-white/10 disabled:opacity-40"
               aria-label="Pin at address"
             >
-              <Search size={15} color="#B8C0CC" />
+              <Search size={15} color="#B9C4BE" />
             </button>
           </div>
         </div>
@@ -225,15 +225,15 @@ export default function SpotsScreen() {
           <div className="flex gap-2">
             <button
               onClick={() => setShowMap(false)}
-              className="flex-1 py-2 rounded-lg text-xs term-font font-bold flex items-center justify-center gap-1.5 border"
-              style={!showMap ? { background: "#1F2937", color: "#4ADE80", borderColor: "#4ADE80" } : { color: "#7A8494", borderColor: "#1F2937" }}
+              className="flex-1 py-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 border"
+              style={!showMap ? { background: "rgba(255,255,255,.12)", color: "rgb(var(--a-400))", borderColor: "rgb(var(--a-400))" } : { color: "#7C8983", borderColor: "rgba(255,255,255,.12)" }}
             >
               <List size={13} /> LIST
             </button>
             <button
               onClick={() => setShowMap(true)}
-              className="flex-1 py-2 rounded-lg text-xs term-font font-bold flex items-center justify-center gap-1.5 border"
-              style={showMap ? { background: "#1F2937", color: "#4ADE80", borderColor: "#4ADE80" } : { color: "#7A8494", borderColor: "#1F2937" }}
+              className="flex-1 py-2 rounded-lg text-xs font-mono font-bold flex items-center justify-center gap-1.5 border"
+              style={showMap ? { background: "rgba(255,255,255,.12)", color: "rgb(var(--a-400))", borderColor: "rgb(var(--a-400))" } : { color: "#7C8983", borderColor: "rgba(255,255,255,.12)" }}
             >
               <MapIcon size={13} /> MAP
             </button>
@@ -242,8 +242,8 @@ export default function SpotsScreen() {
           {showMap && place && (
             <Suspense
               fallback={
-                <div className="w-full h-72 rounded-xl border border-edge flex items-center justify-center">
-                  <Loader2 size={24} className="animate-spin" color="#4ADE80" />
+                <div className="w-full h-72 rounded-xl border border-white/10 flex items-center justify-center">
+                  <Loader2 size={24} className="animate-spin" color="rgb(var(--a-400))" />
                 </div>
               }
             >
@@ -251,7 +251,7 @@ export default function SpotsScreen() {
             </Suspense>
           )}
           {showMap && !place && (
-            <div className="bg-panel border border-edge rounded-xl p-4 text-sm text-faint">
+            <div className="panel rounded-xl p-4 text-sm text-faint">
               The map needs a center — drop a pin at your location once, or search a place on the
               Yards tab first.
             </div>
@@ -260,7 +260,7 @@ export default function SpotsScreen() {
           {!showMap && (
             <div className="flex flex-col gap-2">
               {spots.map((s) => (
-                <div key={s.id} className="bg-panel border border-edge rounded-xl px-4 py-3">
+                <div key={s.id} className="panel rounded-xl px-4 py-3">
                   <button className="w-full text-left" onClick={() => setExpanded(expanded === s.id ? null : s.id)}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -268,7 +268,7 @@ export default function SpotsScreen() {
                         <span className="text-sm text-white font-medium truncate">{s.label}</span>
                       </div>
                       {place && (
-                        <span className="term-font text-xs text-faint flex-shrink-0">
+                        <span className="font-mono text-xs text-faint flex-shrink-0">
                           {(Math.round(milesBetween(place.lat, place.lng, s.lat, s.lng) * 10) / 10).toFixed(1)} mi
                         </span>
                       )}
@@ -280,12 +280,12 @@ export default function SpotsScreen() {
                   </button>
                   {expanded === s.id && (
                     <div className="mt-2.5 flex flex-col gap-2">
-                      {s.note && <div className="text-xs text-mist bg-ink border border-edge rounded-lg px-3 py-2">{s.note}</div>}
+                      {s.note && <div className="text-xs text-mist bg-ink border border-white/10 rounded-lg px-3 py-2">{s.note}</div>}
                       <div className="flex gap-2">
                         <button
                           onClick={() => launch(`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`)}
-                          className="flex-1 py-2 rounded-lg term-font font-bold text-[11px] flex items-center justify-center gap-1.5"
-                          style={{ background: "#4ADE80", color: "#0A0E1A" }}
+                          className="flex-1 py-2 rounded-lg font-mono font-bold text-[11px] flex items-center justify-center gap-1.5"
+                          style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
                         >
                           <Navigation size={12} /> GO
                         </button>
@@ -294,16 +294,16 @@ export default function SpotsScreen() {
                             <button
                               onClick={() => deleteSpot(s.id)}
                               className="flex-1 py-2 rounded-lg text-[11px] font-bold"
-                              style={{ background: "#F87171", color: "#0A0E1A" }}
+                              style={{ background: "#FB7185", color: "#0A0D0C" }}
                             >
                               REALLY REMOVE
                             </button>
-                            <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2 rounded-lg text-[11px] border border-edge text-mist">
+                            <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2 rounded-lg text-[11px] border border-white/10 text-mist">
                               KEEP
                             </button>
                           </>
                         ) : (
-                          <button onClick={() => setConfirmDelete(s.id)} className="flex-1 py-2 rounded-lg text-[11px] border border-edge text-mist">
+                          <button onClick={() => setConfirmDelete(s.id)} className="flex-1 py-2 rounded-lg text-[11px] border border-white/10 text-mist">
                             Remove pin
                           </button>
                         )}
@@ -318,7 +318,7 @@ export default function SpotsScreen() {
       )}
 
       {spots.length === 0 && !adding && (
-        <div className="bg-panel border border-edge rounded-xl p-5 text-sm text-faint">
+        <div className="panel rounded-xl p-5 text-sm text-faint">
           No pins yet. Saw a curb pile you couldn't grab today? A dumpster spot worth
           re-checking? Drop a pin so future-you can find it.
         </div>
@@ -326,14 +326,14 @@ export default function SpotsScreen() {
 
       {/* Free stuff launchers — honest: search shortcuts, not aggregation */}
       <div>
-        <div className="term-font text-[10px] tracking-widest text-faint mb-2">FREE-STUFF SEARCH LAUNCHERS</div>
+        <div className="font-mono text-[10px] tracking-widest text-faint mb-2">FREE-STUFF SEARCH LAUNCHERS</div>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {QUERY_PACKS.map((p) => (
             <button
               key={p}
               onClick={() => setFreeQuery(p)}
               className="px-2.5 py-1 rounded-full text-[11px] border"
-              style={activeFreeQuery === p ? { borderColor: "#4ADE80", color: "#4ADE80" } : { borderColor: "#1F2937", color: "#7A8494" }}
+              style={activeFreeQuery === p ? { borderColor: "rgb(var(--a-400))", color: "rgb(var(--a-400))" } : { borderColor: "rgba(255,255,255,.12)", color: "#7C8983" }}
             >
               {p}
             </button>
@@ -343,24 +343,24 @@ export default function SpotsScreen() {
           value={freeQuery}
           onChange={(e) => setFreeQuery(e.target.value)}
           placeholder="or type your own search"
-          className="w-full bg-panel border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout mb-2"
+          className="w-full panel rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50 mb-2"
         />
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => launch(`https://www.craigslist.org/search/zza${activeFreeQuery ? `?query=${q(activeFreeQuery)}` : ""}`)}
-            className="py-2.5 rounded-xl text-xs font-semibold border border-edge text-mist flex items-center justify-center gap-1.5"
+            className="py-2.5 rounded-xl text-xs font-semibold border border-white/10 text-mist flex items-center justify-center gap-1.5"
           >
             <ExternalLink size={12} /> Craigslist free
           </button>
           <button
             onClick={() => launch(activeFreeQuery ? `https://www.facebook.com/marketplace/search/?query=${q(activeFreeQuery)}` : "https://www.facebook.com/marketplace/category/free")}
-            className="py-2.5 rounded-xl text-xs font-semibold border border-edge text-mist flex items-center justify-center gap-1.5"
+            className="py-2.5 rounded-xl text-xs font-semibold border border-white/10 text-mist flex items-center justify-center gap-1.5"
           >
             <ExternalLink size={12} /> FB Marketplace
           </button>
           <button
             onClick={() => launch(`https://nextdoor.com/search/?query=${q(activeFreeQuery || "free")}`)}
-            className="py-2.5 rounded-xl text-xs font-semibold border border-edge text-mist flex items-center justify-center gap-1.5"
+            className="py-2.5 rounded-xl text-xs font-semibold border border-white/10 text-mist flex items-center justify-center gap-1.5"
           >
             <ExternalLink size={12} /> Nextdoor
           </button>
@@ -372,7 +372,7 @@ export default function SpotsScreen() {
                   : "https://www.estatesales.net/"
               )
             }
-            className="py-2.5 rounded-xl text-xs font-semibold border border-edge text-mist flex items-center justify-center gap-1.5"
+            className="py-2.5 rounded-xl text-xs font-semibold border border-white/10 text-mist flex items-center justify-center gap-1.5"
           >
             <ExternalLink size={12} /> Estate sales
           </button>
