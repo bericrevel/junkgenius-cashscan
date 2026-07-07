@@ -296,7 +296,10 @@ export default async function handler(req: NodeReq, res: NodeRes) {
 
   try {
     if (task === "identify") {
-      const geminiKey = process.env.GEMINI_API_KEY;
+      // Accept the canonical name plus the alias actually configured on this
+      // project's Vercel dashboard ("geminikey") — Vercel can't rename a
+      // sensitive env var in place, so the server meets it where it is.
+      const geminiKey = process.env.GEMINI_API_KEY || process.env.geminikey;
       if (!geminiKey) {
         res.status(500).json({ error: "GEMINI_API_KEY not configured on server" });
         return;
