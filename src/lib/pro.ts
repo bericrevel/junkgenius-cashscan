@@ -11,13 +11,21 @@ const TIMEOUT_MS = 30_000;
 
 const DEVICE_KEY = "junkgenius:deviceId";
 const PRO_CACHE_KEY = "junkgenius:pro";
+const FOUNDER_KEY = "junkgenius:founder";
 const CACHE_FRESH_MS = 6 * 60 * 60 * 1000;
 const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ProState {
   pro: boolean;
   checkedAt: number;
-  source: "network" | "cache" | "grace" | "none";
+  source: "network" | "cache" | "grace" | "none" | "founder";
+}
+
+/** Owner unlock — set once when the server confirms the founder code
+ *  (typed into the Restore box). Permanent on this device, works offline
+ *  forever, survives every entitlement re-check. */
+export async function isFounder(): Promise<boolean> {
+  return (await getItem(FOUNDER_KEY)) === "1";
 }
 
 export async function getDeviceId(): Promise<string> {
@@ -87,6 +95,7 @@ async function billingCall(action: string, extra: Record<string, unknown> = {}):
 }
 
 export async function refreshEntitlement(opts: { force?: boolean } = {}): Promise<ProState> {
+  if (await isFounder()) return { pro: true, checkedAt: Date.now(), source: "founder" };
   const cached = await readCache();
   if (!opts.force && cached && Date.now() - cached.checkedAt < CACHE_FRESH_MS) return cached;
   try {
@@ -105,10 +114,17 @@ export async function startCheckout(plan: "monthly" | "annual"): Promise<void> {
   await Browser.open({ url: data.url });
 }
 
-export async function restoreByEmail(email: string): Promise<{ pro: boolean; message?: string }> {
+export async function restoreByEmail(
+  email: string
+): Promise<{ pro: boolean; founder?: boolean; message?: string }> {
   const data = await billingCall("restore", { email });
+  if (data.founder === true) await setItem(FOUNDER_KEY, "1");
   if (data.pro) await writeCache(true);
-  return { pro: !!data.pro, message: typeof data.message === "string" ? data.message : undefined };
+  return {
+    pro: !!data.pro,
+    founder: data.founder === true,
+    message: typeof data.message === "string" ? data.message : undefined,
+  };
 }
 
 export async function openPortal(): Promise<void> {
