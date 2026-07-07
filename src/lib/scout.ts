@@ -14,7 +14,15 @@ interface RawTaskResult {
   error?: string;
 }
 
-async function callTask(task: string, payload: Record<string, unknown>): Promise<RawTaskResult> {
+/** What every caller actually gets back — text is guaranteed present here;
+ *  the empty-text case is turned into a thrown error before this type is
+ *  ever produced, so callers never have to re-check for undefined. */
+interface TaskResult {
+  text: string;
+  truncated: boolean;
+}
+
+async function callTask(task: string, payload: Record<string, unknown>): Promise<TaskResult> {
   if (!API_BASE) {
     throw new Error("The app isn't connected to its server. (Build with VITE_API_BASE_URL set — see .env.example.)");
   }
@@ -54,7 +62,7 @@ async function callTask(task: string, payload: Record<string, unknown>): Promise
     throw new Error(data.error ? `Problem: ${data.error}` : "Something went wrong. Tap Try Again.");
   }
   if (!data.text) throw new Error("Got an empty answer back. Tap Try Again.");
-  return data;
+  return { text: data.text, truncated: !!data.truncated };
 }
 
 function extractJSON(text: string): Record<string, unknown> {
