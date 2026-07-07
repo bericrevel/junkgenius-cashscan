@@ -64,7 +64,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
             Pick something from your inventory to draft a listing for:
           </div>
           {onHand.length === 0 ? (
-            <div className="bg-panel border border-edge rounded-xl p-5 text-sm text-faint">
+            <div className="panel rounded-xl p-5 text-sm text-faint">
               Nothing on hand yet. Scan an item and add it to your inventory first — then this
               tool writes the ad.
             </div>
@@ -81,7 +81,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
                       resaleHigh: i.resaleHigh,
                     })
                   }
-                  className="text-left bg-panel border border-edge rounded-xl px-4 py-3"
+                  className="text-left panel rounded-xl px-4 py-3"
                 >
                   <div className="text-sm text-white font-medium">{i.item}</div>
                   <div className="text-xs text-faint mt-0.5">
@@ -96,7 +96,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
 
       {input && !draft && (
         <>
-          <div className="bg-panel border border-edge rounded-xl px-4 py-3">
+          <div className="panel rounded-xl px-4 py-3">
             <div className="text-sm text-white font-semibold">{input.item}</div>
             <div className="text-xs text-faint mt-0.5">
               est. resale ${input.resaleLow}–${input.resaleHigh}
@@ -107,7 +107,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
             </button>
           </div>
           <div>
-            <div className="term-font text-[10px] tracking-widest text-faint mb-2">
+            <div className="font-mono text-[10px] tracking-widest text-faint mb-2">
               ANYTHING THE BUYER SHOULD KNOW? (OPTIONAL)
             </div>
             <textarea
@@ -115,20 +115,20 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Runs but pull cord sticks. Garage kept. Cash only..."
-              className="w-full bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-scout resize-none"
+              className="w-full panel rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-abright/50 resize-none"
             />
           </div>
           {error && (
-            <div className="bg-panel border-2 border-alert rounded-xl p-3 text-sm flex gap-2">
-              <AlertTriangle size={16} className="flex-shrink-0" color="#F87171" />
+            <div className="panel border-2 border-rose/40 rounded-xl p-3 text-sm flex gap-2">
+              <AlertTriangle size={16} className="flex-shrink-0" color="#FB7185" />
               <span>{error}</span>
             </div>
           )}
           <button
             onClick={run}
             disabled={busy}
-            className="w-full py-4 rounded-xl term-font font-extrabold text-lg flex items-center justify-center gap-2 disabled:opacity-60"
-            style={{ background: "#4ADE80", color: "#0A0E1A" }}
+            className="w-full py-4 rounded-xl font-mono font-extrabold text-lg flex items-center justify-center gap-2 disabled:opacity-60"
+            style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : null} DRAFT THE LISTING
           </button>
@@ -139,26 +139,26 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
       {input && draft && (
         <>
           <div>
-            <div className="term-font text-[10px] tracking-widest text-faint mb-1.5">TITLE</div>
+            <div className="font-mono text-[10px] tracking-widest text-faint mb-1.5">TITLE</div>
             <input
               value={draft.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value.slice(0, 80) })}
-              className="w-full bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-white font-semibold outline-none focus:border-scout"
+              className="w-full panel rounded-xl px-4 py-3 text-sm text-white font-semibold outline-none focus:border-abright/50"
             />
             <div className="text-[10px] text-faint mt-1 text-right">{draft.title.length}/80</div>
           </div>
           <div>
-            <div className="term-font text-[10px] tracking-widest text-faint mb-1.5">DESCRIPTION</div>
+            <div className="font-mono text-[10px] tracking-widest text-faint mb-1.5">DESCRIPTION</div>
             <textarea
               value={draft.description}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               rows={5}
-              className="w-full bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-scout resize-none"
+              className="w-full panel rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-abright/50 resize-none"
             />
           </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <div className="term-font text-[10px] tracking-widest text-faint mb-1.5">PRICE ($)</div>
+              <div className="font-mono text-[10px] tracking-widest text-faint mb-1.5">PRICE ($)</div>
               <input
                 value={String(draft.price)}
                 onChange={(e) => {
@@ -166,12 +166,12 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
                   setDraft({ ...draft, price: Number.isFinite(n) ? n : 0 });
                 }}
                 inputMode="decimal"
-                className="w-full bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-white font-semibold outline-none focus:border-scout"
+                className="w-full panel rounded-xl px-4 py-3 text-sm text-white font-semibold outline-none focus:border-abright/50"
               />
             </div>
             <div className="flex-1">
-              <div className="term-font text-[10px] tracking-widest text-faint mb-1.5">BEST PLATFORM</div>
-              <div className="bg-ink border border-edge rounded-xl px-4 py-3 text-sm text-mist">{draft.platform}</div>
+              <div className="font-mono text-[10px] tracking-widest text-faint mb-1.5">BEST PLATFORM</div>
+              <div className="bg-ink border border-white/10 rounded-xl px-4 py-3 text-sm text-mist">{draft.platform}</div>
             </div>
           </div>
           {draft.pricingNote && <div className="text-xs text-faint italic">{draft.pricingNote}</div>}
@@ -179,7 +179,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
           <button
             onClick={copyAll}
             className="w-full py-3.5 rounded-xl font-semibold border flex items-center justify-center gap-2"
-            style={{ borderColor: "#4ADE80", color: "#4ADE80" }}
+            style={{ borderColor: "rgb(var(--a-400))", color: "rgb(var(--a-400))" }}
           >
             {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy the whole listing"}
           </button>
@@ -189,7 +189,7 @@ export default function ListingScreen({ inventory, prefill, onAiAction }: Props)
               <button
                 key={l.label}
                 onClick={() => Browser.open({ url: l.url })}
-                className="w-full py-3 rounded-xl font-semibold text-sm border border-edge text-mist flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl font-semibold text-sm border border-white/10 text-mist flex items-center justify-center gap-2"
               >
                 <ExternalLink size={14} /> {l.label}
               </button>
