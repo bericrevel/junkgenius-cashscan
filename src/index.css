@@ -23,8 +23,14 @@ body {
   background-attachment: fixed;
 }
 
+/* emerald mirrored-chrome lettering — same multi-band reflected-light
+   structure as a real chrome-text effect (bright specular point, shadow
+   band, second highlight band, settle to shadow), just recolored into the
+   deep emerald family instead of neutral silver. This is for headings,
+   titles, and item names — never for button labels (need flat contrast)
+   or dollar amounts (need flat legibility at small sizes — see .green-text). */
 .chrome-text {
-  background: linear-gradient(180deg, #fff 0%, #cfd6d6 28%, #7d8788 48%, #eef2f2 62%, #8b9698 100%);
+  background: linear-gradient(180deg, #ECFDF5 0%, #6EE7B7 22%, #047857 44%, #022C22 54%, #34D399 68%, #A7F3D0 82%, #065F46 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .green-text { color: #34D399; text-shadow: 0 0 20px rgba(16,185,129,.4); }
