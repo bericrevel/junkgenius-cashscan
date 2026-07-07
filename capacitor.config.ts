@@ -1,12 +1,12 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-// appId LOCKED (decision, July 2026): com.aerkatech.cashscan
-// Suite convention: flat org root — com.aerkatech.<app>, one lowercase
-// single-word segment per app, never a rebrandable family name. The display
-// name ("JunkGenius CashScan") carries the branding; only the ID is permanent.
+// Suite convention: com.aerkatech.<app> — flat org root, one lowercase
+// single-word segment per app. Permanent after first Play upload.
+// JunkGenius is the merged flagship (ScrapScout + CashScan united, v4.1
+// Mirrored Chrome / Deep Emerald Glass design) — replaces both standalone apps.
 const config: CapacitorConfig = {
-  appId: "com.aerkatech.cashscan",
-  appName: "JunkGenius CashScan",
+  appId: "com.aerkatech.junkgenius",
+  appName: "JunkGenius",
   webDir: "dist",
   server: {
     androidScheme: "https",
