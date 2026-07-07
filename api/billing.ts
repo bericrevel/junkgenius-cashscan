@@ -8,9 +8,21 @@
 //   portal      → Stripe customer portal (manage / cancel anytime)
 //
 // Env vars: STRIPE_SECRET_KEY, STRIPE_PRICE_MONTHLY, STRIPE_PRICE_ANNUAL,
-//           APP_SHARED_KEY (optional gate).
+//           APP_SHARED_KEY (optional gate),
+//           FOUNDER_CODE (optional owner unlock — typed into the app's
+//           "Restore my Pro" box; grants permanent Pro on that device with
+//           no Stripe record. Lives only here, never in the client bundle).
 // Note: entitlement uses Stripe Search (eventually consistent, ~1 min) — the
 // app copes with a polite "can take a minute" retry flow.
+
+/** Constant-time-ish string compare — a plain === can, in principle, leak
+ *  match-prefix length through timing. Cheap to do right, so do it right. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -103,12 +115,6 @@ export default async function handler(req: NodeReq, res: NodeRes) {
     return;
   }
 
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) {
-    res.status(500).json({ error: "STRIPE_SECRET_KEY not configured on server" });
-    return;
-  }
-
   const sharedKey = process.env.APP_SHARED_KEY;
   if (sharedKey && req.headers["x-app-key"] !== sharedKey) {
     res.status(401).json({ error: "Unauthorized" });
@@ -139,6 +145,26 @@ export default async function handler(req: NodeReq, res: NodeRes) {
     (typeof req.headers["host"] === "string" && req.headers["host"]) ||
     "";
   const origin = host ? `https://${host}` : "";
+
+  // ---- Founder unlock (owner convenience) ----
+  // Checked BEFORE the Stripe gate so the owner's unlock works even on a
+  // deployment where Stripe isn't configured yet. A non-matching attempt
+  // falls through to the normal email-restore path below, so responses
+  // never reveal that a code exists.
+  if (action === "restore") {
+    const founderCode = process.env.FOUNDER_CODE || "";
+    const attempt = typeof body.email === "string" ? body.email.trim() : "";
+    if (founderCode && attempt && safeEqual(attempt, founderCode)) {
+      res.status(200).json({ pro: true, founder: true });
+      return;
+    }
+  }
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) {
+    res.status(500).json({ error: "STRIPE_SECRET_KEY not configured on server" });
+    return;
+  }
 
   try {
     if (action === "checkout") {
