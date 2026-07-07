@@ -19,6 +19,10 @@ export interface ProState {
   pro: boolean;
   checkedAt: number;
   source: "network" | "cache" | "grace" | "none" | "founder";
+  /** "sub" (subscription) or "founders" ($99 lifetime, one of 250). */
+  plan?: "sub" | "founders";
+  /** Founding Scrapper number (1–250) when plan === "founders". */
+  founderNo?: number;
 }
 
 /** Owner unlock — set once when the server confirms the founder code
@@ -44,17 +48,20 @@ async function readCache(): Promise<ProState | null> {
   const raw = await getItem(PRO_CACHE_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { pro?: boolean; checkedAt?: number };
+    const parsed = JSON.parse(raw) as { pro?: boolean; checkedAt?: number; plan?: "sub" | "founders"; founderNo?: number };
     if (typeof parsed.pro !== "boolean" || typeof parsed.checkedAt !== "number") return null;
-    return { pro: parsed.pro, checkedAt: parsed.checkedAt, source: "cache" };
+    return { pro: parsed.pro, checkedAt: parsed.checkedAt, source: "cache", plan: parsed.plan, founderNo: parsed.founderNo };
   } catch {
     return null;
   }
 }
 
-async function writeCache(pro: boolean): Promise<ProState> {
-  const state: ProState = { pro, checkedAt: Date.now(), source: "network" };
-  await setItem(PRO_CACHE_KEY, JSON.stringify({ pro: state.pro, checkedAt: state.checkedAt }));
+async function writeCache(pro: boolean, extra: { plan?: "sub" | "founders"; founderNo?: number } = {}): Promise<ProState> {
+  const state: ProState = { pro, checkedAt: Date.now(), source: "network", ...extra };
+  await setItem(
+    PRO_CACHE_KEY,
+    JSON.stringify({ pro: state.pro, checkedAt: state.checkedAt, plan: state.plan, founderNo: state.founderNo })
+  );
   return state;
 }
 
@@ -100,7 +107,10 @@ export async function refreshEntitlement(opts: { force?: boolean } = {}): Promis
   if (!opts.force && cached && Date.now() - cached.checkedAt < CACHE_FRESH_MS) return cached;
   try {
     const data = await billingCall("entitlement");
-    return await writeCache(!!data.pro);
+    return await writeCache(!!data.pro, {
+      plan: data.plan === "founders" ? "founders" : data.plan === "sub" ? "sub" : undefined,
+      founderNo: typeof data.number === "number" ? data.number : undefined,
+    });
   } catch {
     if (cached?.pro && Date.now() - cached.checkedAt < OFFLINE_GRACE_MS) return { ...cached, source: "grace" };
     if (cached) return cached;
@@ -108,10 +118,21 @@ export async function refreshEntitlement(opts: { force?: boolean } = {}): Promis
   }
 }
 
-export async function startCheckout(plan: "monthly" | "annual"): Promise<void> {
+export async function startCheckout(plan: "monthly" | "annual" | "founders"): Promise<void> {
   const data = await billingCall("checkout", { plan });
+  if (data.soldOut) throw new Error("All 250 Founders Editions are claimed.");
   if (typeof data.url !== "string") throw new Error("Didn't get a checkout link. Try again.");
   await Browser.open({ url: data.url });
+}
+
+/** Live Founders Edition availability — real Stripe numbers or an error;
+ *  the UI shows nothing rather than a made-up count. */
+export async function foundersStatus(): Promise<{ sold: number; remaining: number; cap: number }> {
+  const data = await billingCall("founders");
+  if (typeof data.sold !== "number" || typeof data.remaining !== "number" || typeof data.cap !== "number") {
+    throw new Error("Couldn't load Founders availability.");
+  }
+  return { sold: data.sold, remaining: data.remaining, cap: data.cap };
 }
 
 export async function restoreByEmail(
@@ -119,7 +140,11 @@ export async function restoreByEmail(
 ): Promise<{ pro: boolean; founder?: boolean; message?: string }> {
   const data = await billingCall("restore", { email });
   if (data.founder === true) await setItem(FOUNDER_KEY, "1");
-  if (data.pro) await writeCache(true);
+  if (data.pro)
+    await writeCache(true, {
+      plan: data.plan === "founders" ? "founders" : data.plan === "sub" ? "sub" : undefined,
+      founderNo: typeof data.number === "number" ? data.number : undefined,
+    });
   return {
     pro: !!data.pro,
     founder: data.founder === true,
