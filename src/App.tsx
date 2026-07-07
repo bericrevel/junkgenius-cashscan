@@ -41,6 +41,7 @@ import {
   startCheckout,
   restoreByEmail,
   openPortal,
+  isFounder,
 } from "./lib/pro";
 
 // ---- Move styling — chrome/emerald identity ----
@@ -142,6 +143,7 @@ export default function App() {
   const [proNotice, setProNotice] = useState<string | null>(null);
   const [proError, setProError] = useState<string | null>(null);
   const [restoreEmail, setRestoreEmail] = useState("");
+  const [founder, setFounder] = useState(false);
 
   // ---- Finish (theme) ----
   const [theme, setThemeState] = useState<ThemeId>("emerald");
@@ -171,6 +173,7 @@ export default function App() {
     loadInventory().then(setInventory);
     refreshEntitlement().then(setProState);
     loadAiCount().then(setAiCount);
+    isFounder().then(setFounder);
   }, []);
 
   const screenRef = useRef<Screen>("home");
@@ -406,7 +409,8 @@ export default function App() {
     try {
       const r = await restoreByEmail(restoreEmail.trim());
       if (r.pro) {
-        setProState({ pro: true, checkedAt: Date.now(), source: "network" });
+        if (r.founder) setFounder(true);
+        setProState({ pro: true, checkedAt: Date.now(), source: r.founder ? "founder" : "network" });
         setRestoreEmail("");
       } else {
         setProError(r.message || "No active Pro found for that email.");
@@ -843,14 +847,20 @@ export default function App() {
             {isPro ? (
               <div className="flex flex-col items-center text-center gap-3 mt-8">
                 <div className="bezel rounded-full" style={{ width: 64, height: 64 }}><div className="bezel-face green"><Zap size={28} /></div></div>
-                <div className="font-disp font-bold text-2xl chrome-text">You're Pro. ⚡</div>
-                <div className="text-sm text-faint max-w-xs">Unlimited scans and guides — and your few bucks keep this tool alive for the next person digging out. Thank you.</div>
-                <button onClick={resetScan} className="gbtn w-full max-w-xs py-4 mt-2 rounded-2xl font-disp font-bold text-lg"><span>SCAN SOMETHING</span></button>
-                <div className="cbtn w-full max-w-xs h-12">
-                  <button onClick={managePlan} disabled={proBusy === "portal"} className="cbtn-in w-full h-full flex items-center gap-2 text-sm font-bold disabled:opacity-50">
-                    <Settings size={15} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
-                  </button>
+                <div className="font-disp font-bold text-2xl chrome-text">{founder ? "Owner access. ⚡" : "You're Pro. ⚡"}</div>
+                <div className="text-sm text-faint max-w-xs">
+                  {founder
+                    ? "Full Pro, permanent on this device — no subscription, nothing to manage."
+                    : "Unlimited scans and guides — and your few bucks keep this tool alive for the next person digging out. Thank you."}
                 </div>
+                <button onClick={resetScan} className="gbtn w-full max-w-xs py-4 mt-2 rounded-2xl font-disp font-bold text-lg"><span>SCAN SOMETHING</span></button>
+                {!founder && (
+                  <div className="cbtn w-full max-w-xs h-12">
+                    <button onClick={managePlan} disabled={proBusy === "portal"} className="cbtn-in w-full h-full flex items-center gap-2 text-sm font-bold disabled:opacity-50">
+                      <Settings size={15} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
+                    </button>
+                  </div>
+                )}
                 {proError && <div className="panel w-full p-3 text-sm" style={{ borderColor: "rgba(251,113,133,.3)" }}>{proError}</div>}
               </div>
             ) : (
@@ -888,7 +898,7 @@ export default function App() {
                 </div>
                 <div className="pt-3 border-t border-white/[.07]">
                   <div className="text-sm text-white font-semibold mb-1">Already Pro on another phone?</div>
-                  <div className="text-xs text-faint mb-2">Enter the email from your receipt and we'll move it over.</div>
+                  <div className="text-xs text-faint mb-2">Enter the email from your receipt — or an unlock code.</div>
                   <input value={restoreEmail} onChange={(e) => setRestoreEmail(e.target.value)} placeholder="you@example.com" inputMode="email" autoCapitalize="none"
                     className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50 mb-2" />
                   <button onClick={doRestore} disabled={proBusy !== "" || restoreEmail.trim() === ""} className="gbtn w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
