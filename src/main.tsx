@@ -3,12 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-/**
- * Last-resort error boundary. Without it, one unexpected render crash
- * unmounts React and leaves a silent white screen — the worst possible
- * failure for a non-technical user. This shows a plain-language message
- * and a restart button instead.
- */
+/** Last-resort boundary — a crash must never strand a user on a white screen. */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean }
@@ -32,28 +27,28 @@ class ErrorBoundary extends React.Component<
             justifyContent: "center",
             gap: 16,
             padding: 24,
-            background: "#f2ede3",
-            color: "#1a1a1a",
+            background: "#0A0D0C",
+            color: "#B9C4BE",
             fontFamily: "Inter, sans-serif",
             textAlign: "center",
           }}
         >
           <div style={{ fontSize: 40 }}>😖</div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Something broke.</div>
-          <div style={{ fontSize: 14, color: "#4a4a4a", maxWidth: 280 }}>
-            Not your fault. Your tracked sales are safe. Tap below to restart.
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>Something broke.</div>
+          <div style={{ fontSize: 14, maxWidth: 280 }}>
+            Not your fault. Your inventory is safe on your phone. Tap below to restart.
           </div>
           <button
             onClick={() => window.location.reload()}
             style={{
               marginTop: 8,
               padding: "14px 28px",
-              borderRadius: 12,
-              border: "none",
-              background: "#1a1a1a",
-              color: "#f2ede3",
+              borderRadius: 16,
+              border: "1px solid rgba(16,185,129,.4)",
+              background: "linear-gradient(160deg, rgba(52,211,153,.35), rgba(4,120,87,.85))",
+              color: "#fff",
               fontSize: 16,
-              fontWeight: 700,
+              fontWeight: 800,
             }}
           >
             RESTART
