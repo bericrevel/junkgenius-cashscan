@@ -71,7 +71,7 @@ export default function ChatScreen({ onAiAction }: { onAiAction?: () => void }) 
               <button
                 key={s}
                 onClick={() => send(s)}
-                className="text-left bg-panel border border-edge rounded-xl px-4 py-3 text-sm text-mist"
+                className="text-left panel rounded-xl px-4 py-3 text-sm text-mist"
               >
                 {s}
               </button>
@@ -83,23 +83,23 @@ export default function ChatScreen({ onAiAction }: { onAiAction?: () => void }) 
           <div
             key={i}
             className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-              m.role === "user" ? "self-end text-ink" : "self-start bg-panel border border-edge text-mist"
+              m.role === "user" ? "self-end text-ink" : "self-start panel text-mist"
             }`}
-            style={m.role === "user" ? { background: "#4ADE80" } : undefined}
+            style={m.role === "user" ? { background: "rgb(var(--a-400))" } : undefined}
           >
             {m.content}
           </div>
         ))}
 
         {busy && (
-          <div className="self-start bg-panel border border-edge rounded-2xl px-4 py-2.5">
-            <Loader2 size={16} className="animate-spin" color="#4ADE80" />
+          <div className="self-start panel rounded-2xl px-4 py-2.5">
+            <Loader2 size={16} className="animate-spin" color="rgb(var(--a-400))" />
           </div>
         )}
 
         {error && (
-          <div className="bg-panel border-2 border-alert rounded-xl p-3 text-sm flex gap-2">
-            <AlertTriangle size={16} className="flex-shrink-0" color="#F87171" />
+          <div className="panel border-2 border-rose/40 rounded-xl p-3 text-sm flex gap-2">
+            <AlertTriangle size={16} className="flex-shrink-0" color="#FB7185" />
             <span>{error}</span>
           </div>
         )}
@@ -112,11 +112,11 @@ export default function ChatScreen({ onAiAction }: { onAiAction?: () => void }) 
                 <button
                   onClick={doClear}
                   className="px-3 py-1 rounded font-semibold"
-                  style={{ background: "#F87171", color: "#0A0E1A" }}
+                  style={{ background: "#FB7185", color: "#0A0D0C" }}
                 >
                   Clear
                 </button>
-                <button onClick={() => setConfirmClear(false)} className="px-3 py-1 rounded border border-edge text-mist">
+                <button onClick={() => setConfirmClear(false)} className="px-3 py-1 rounded border border-white/10 text-mist">
                   Keep
                 </button>
               </div>
@@ -130,25 +130,25 @@ export default function ChatScreen({ onAiAction }: { onAiAction?: () => void }) 
         <div ref={endRef} />
       </div>
 
-      <div className="border-t border-edge bg-panel p-3 flex gap-2">
+      <div className="border-t border-white/[.06] bg-ink2 p-3 flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder="Ask the scout..."
-          className="min-w-0 flex-1 bg-ink border border-edge rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-scout"
+          className="min-w-0 flex-1 bg-ink border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-abright/50"
         />
         <button
           onClick={() => send()}
           disabled={busy || !input.trim()}
           className="px-4 rounded-xl disabled:opacity-40 flex items-center justify-center"
-          style={{ background: "#4ADE80" }}
+          style={{ background: "rgb(var(--a-400))" }}
           aria-label="Send"
         >
-          <Send size={18} color="#0A0E1A" />
+          <Send size={18} color="#0A0D0C" />
         </button>
       </div>
-      <div className="bg-panel px-4 pb-2 text-[10px] text-faint text-center">
+      <div className="bg-ink2 px-4 pb-2 text-[10px] text-faint text-center">
         AI advice — it won't quote live prices (they move). Check the Prices tab and call your yard.
       </div>
     </div>
