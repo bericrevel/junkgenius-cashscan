@@ -61,6 +61,7 @@ import {
   restoreByEmail,
   openPortal,
   isFounder,
+  foundersStatus,
 } from "./lib/pro";
 import { Browser } from "@capacitor/browser";
 import { Share } from "@capacitor/share";
@@ -105,7 +106,7 @@ const PRICE_ANNUAL_LABEL = "$24 / year";
 // the SWATCH gradients below are literal on purpose: each picker dot must
 // preview ITS OWN finish regardless of which finish is currently active.
 const THEME_KEY = "junkgenius:theme";
-type ThemeId = "emerald" | "sapphire" | "gold";
+type ThemeId = "emerald" | "sapphire" | "gold" | "liberty";
 const THEMES: Array<{ id: ThemeId; label: string; swatch: string }> = [
   {
     id: "emerald",
@@ -124,8 +125,16 @@ const THEMES: Array<{ id: ThemeId; label: string; swatch: string }> = [
   },
 ];
 function isThemeId(v: unknown): v is ThemeId {
-  return v === "emerald" || v === "sapphire" || v === "gold";
+  return v === "emerald" || v === "sapphire" || v === "gold" || v === "liberty";
 }
+
+// Founders Edition exclusive finish — appears in the picker only for
+// Founding Scrappers (or the owner). Old-Glory navy with a red glint.
+const LIBERTY_THEME: { id: ThemeId; label: string; swatch: string } = {
+  id: "liberty",
+  label: "Liberty",
+  swatch: "linear-gradient(155deg, rgba(199,215,242,.5), rgba(178,34,52,.55) 38%, rgba(36,80,154,.8) 62%, rgba(10,27,56,.95)), #060A14",
+};
 
 // Quick-pick chips for logging what a yard actually paid — the most honest
 // price data in the app (the user's own receipts, on-device only).
@@ -210,11 +219,13 @@ export default function App() {
   // ---- Pro gate ----
   const [proState, setProState] = useState<ProState | null>(null);
   const [aiCount, setAiCount] = useState(0);
-  const [proBusy, setProBusy] = useState<"" | "monthly" | "annual" | "check" | "restore" | "portal">("");
+  const [proBusy, setProBusy] = useState<"" | "monthly" | "annual" | "founders" | "check" | "restore" | "portal">("");
   const [proNotice, setProNotice] = useState<string | null>(null);
   const [proError, setProError] = useState<string | null>(null);
   const [restoreEmail, setRestoreEmail] = useState("");
   const [founder, setFounder] = useState(false);
+  // Live Founders Edition availability — real Stripe count or nothing.
+  const [foundersLeft, setFoundersLeft] = useState<{ sold: number; remaining: number; cap: number } | null>(null);
 
   // ---- Yards state (ported from ScrapScout — real OpenStreetMap data) ----
   const [place, setPlace] = useState<Place | null>(null);
@@ -476,7 +487,7 @@ export default function App() {
   };
 
   // ---- Pro actions ----
-  const buyPlan = async (plan: "monthly" | "annual") => {
+  const buyPlan = async (plan: "monthly" | "annual" | "founders") => {
     setProBusy(plan);
     setProError(null);
     setProNotice(null);
@@ -672,6 +683,17 @@ export default function App() {
     else go();
   };
 
+  // Live Founders availability whenever the Pro pitch is on screen.
+  useEffect(() => {
+    if (screen !== "pro" || isPro) return;
+    let stale = false;
+    foundersStatus()
+      .then((f) => { if (!stale) setFoundersLeft(f); })
+      .catch(() => { if (!stale) setFoundersLeft(null); }); // no fake scarcity — show nothing
+    return () => { stale = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, isPro]);
+
   // ---- Toolbox navigation ----
   const openListingFor = (input: ListingInput | null) => {
     setListingPrefill(input);
@@ -852,7 +874,7 @@ export default function App() {
               <div className="panel p-4">
                 <div className="font-mono text-[10px] tracking-widest text-faint mb-3">FINISH</div>
                 <div className="flex items-stretch">
-                  {THEMES.map((t) => {
+                  {(founder || proState?.plan === "founders" ? [...THEMES, LIBERTY_THEME] : THEMES).map((t) => {
                     const active = theme === t.id;
                     return (
                       <button
@@ -1669,14 +1691,26 @@ export default function App() {
             {isPro ? (
               <div className="flex flex-col items-center text-center gap-3 mt-8">
                 <div className="bezel rounded-full" style={{ width: 64, height: 64 }}><div className="bezel-face green"><Zap size={28} /></div></div>
-                <div className="font-disp font-bold text-2xl chrome-text">{founder ? "Owner access. ⚡" : "You're Pro. ⚡"}</div>
+                <div className="font-disp font-bold text-2xl chrome-text">
+                  {founder ? "Owner access. ⚡" : proState?.plan === "founders" ? "Founding Scrapper." : "You're Pro. ⚡"}
+                </div>
+                {proState?.plan === "founders" && (
+                  <div className="panel px-5 py-3 flex flex-col items-center gap-1" style={{ borderColor: "rgb(var(--a-400) / .35)" }}>
+                    <div className="font-mono font-extrabold text-lg green-text">
+                      №{proState.founderNo ?? "—"} of 250
+                    </div>
+                    <div className="font-mono text-[9px] tracking-[.2em] text-faint">FOUNDERS EDITION · AMERICA'S 250TH · 1776–2026</div>
+                  </div>
+                )}
                 <div className="text-sm text-faint max-w-xs">
                   {founder
                     ? "Full Pro, permanent on this device — no subscription, nothing to manage."
+                    : proState?.plan === "founders"
+                    ? "Lifetime access — one of 250, ever. No subscription, nothing to cancel. The Liberty finish is yours on the Home screen."
                     : "Unlimited scans and guides — and your few bucks keep this tool alive for the next person digging out. Thank you."}
                 </div>
                 <button onClick={resetScan} className="gbtn w-full max-w-xs py-4 mt-2 rounded-2xl font-disp font-bold text-lg"><span>SCAN SOMETHING</span></button>
-                {!founder && (
+                {!founder && proState?.plan !== "founders" && (
                   <div className="cbtn w-full max-w-xs h-12">
                     <button onClick={managePlan} disabled={proBusy === "portal"} className="cbtn-in w-full h-full flex items-center gap-2 text-sm font-bold disabled:opacity-50">
                       <Settings size={15} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
@@ -1703,6 +1737,28 @@ export default function App() {
                     <li>Canceling — two taps, no phone calls</li>
                   </ul>
                 </div>
+                {/* Founders Edition — real cap, real live count, never faked */}
+                <div className="panel p-4 relative overflow-hidden" style={{ borderColor: "rgb(var(--a-400) / .3)" }}>
+                  <div className="font-mono text-[9px] tracking-[.2em] text-faint">FOUNDERS EDITION · 1776–2026</div>
+                  <div className="font-disp font-bold text-lg chrome-text mt-1">$99 once. Yours for life.</div>
+                  <div className="text-[12.5px] text-mist mt-1.5 leading-relaxed">
+                    250 ever, for America's 250th year — numbered, lifetime Pro, nothing to cancel,
+                    plus the Founders-only <b className="text-white">Liberty</b> finish.
+                  </div>
+                  {foundersLeft && foundersLeft.remaining > 0 && (
+                    <div className="font-mono text-[11px] mt-2 green-text">{foundersLeft.remaining} of {foundersLeft.cap} remaining</div>
+                  )}
+                  {foundersLeft && foundersLeft.remaining <= 0 ? (
+                    <div className="mt-3 w-full py-3 rounded-xl border border-white/10 text-center text-sm text-faint font-bold">
+                      All 250 claimed — thank you, Founders.
+                    </div>
+                  ) : (
+                    <button onClick={() => buyPlan("founders")} disabled={proBusy !== ""} className="gbtn mt-3 w-full py-3.5 rounded-xl font-disp font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60">
+                      {proBusy === "founders" && <Loader2 size={17} className="animate-spin" />} <span>BECOME A FOUNDER — $99</span>
+                    </button>
+                  )}
+                </div>
+
                 <button onClick={() => buyPlan("monthly")} disabled={proBusy !== ""} className="gbtn w-full py-4 rounded-2xl font-disp font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-60">
                   {proBusy === "monthly" && <Loader2 size={18} className="animate-spin" />} <span>{PRICE_MONTHLY_LABEL}</span>
                 </button>
