@@ -105,24 +105,24 @@ export default function PlannerScreen() {
       {!adding ? (
         <button
           onClick={() => setAdding(true)}
-          className="w-full py-3.5 rounded-xl term-font font-extrabold text-base flex items-center justify-center gap-2"
-          style={{ background: "#4ADE80", color: "#0A0E1A" }}
+          className="w-full py-3.5 rounded-xl font-mono font-extrabold text-base flex items-center justify-center gap-2"
+          style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
         >
           <Plus size={17} /> ADD TO THE PLAN
         </button>
       ) : (
-        <div className="bg-panel border border-edge rounded-xl p-4 flex flex-col gap-3">
+        <div className="panel rounded-xl p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="term-font text-[10px] tracking-widest text-faint">NEW ENTRY</div>
+            <div className="font-mono text-[10px] tracking-widest text-faint">NEW ENTRY</div>
             <button onClick={() => setAdding(false)} aria-label="Cancel">
-              <X size={16} color="#7A8494" />
+              <X size={16} color="#7C8983" />
             </button>
           </div>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Bulk trash on Maple St / strip the wire pile"
-            className="w-full bg-ink border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout"
+            className="w-full bg-ink border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
           />
           <div className="flex gap-1.5">
             {(
@@ -136,7 +136,7 @@ export default function PlannerScreen() {
                 key={m}
                 onClick={() => setMode(m)}
                 className="px-3 py-1.5 rounded-full text-[11px] border"
-                style={mode === m ? { borderColor: "#4ADE80", color: "#4ADE80" } : { borderColor: "#1F2937", color: "#7A8494" }}
+                style={mode === m ? { borderColor: "rgb(var(--a-400))", color: "rgb(var(--a-400))" } : { borderColor: "rgba(255,255,255,.12)", color: "#7C8983" }}
               >
                 {label}
               </button>
@@ -147,7 +147,7 @@ export default function PlannerScreen() {
               type="datetime-local"
               value={due}
               onChange={(e) => setDue(e.target.value)}
-              className="w-full bg-ink border border-edge rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-scout"
+              className="w-full bg-ink border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50"
             />
           )}
           {mode === "weekly" && (
@@ -157,7 +157,7 @@ export default function PlannerScreen() {
                   key={d}
                   onClick={() => setWeekday(i)}
                   className="px-2.5 py-1.5 rounded-full text-[11px] border"
-                  style={weekday === i ? { borderColor: "#4ADE80", color: "#4ADE80" } : { borderColor: "#1F2937", color: "#7A8494" }}
+                  style={weekday === i ? { borderColor: "rgb(var(--a-400))", color: "rgb(var(--a-400))" } : { borderColor: "rgba(255,255,255,.12)", color: "#7C8983" }}
                 >
                   {d.slice(0, 3)}
                 </button>
@@ -167,8 +167,8 @@ export default function PlannerScreen() {
           <button
             onClick={addTask}
             disabled={!title.trim() || (mode === "date" && !due)}
-            className="w-full py-3 rounded-xl term-font font-bold text-sm disabled:opacity-40"
-            style={{ background: "#4ADE80", color: "#0A0E1A" }}
+            className="w-full py-3 rounded-xl font-mono font-bold text-sm disabled:opacity-40"
+            style={{ background: "rgb(var(--a-400))", color: "#0A0D0C" }}
           >
             SAVE IT
           </button>
@@ -176,7 +176,7 @@ export default function PlannerScreen() {
       )}
 
       {tasks.length === 0 && !adding && (
-        <div className="bg-panel border border-edge rounded-xl p-5 text-sm text-faint">
+        <div className="panel rounded-xl p-5 text-sm text-faint">
           Empty plan. Start with your town's bulk-trash day — it's the single most reliable free
           inventory of the month.
         </div>
@@ -184,25 +184,25 @@ export default function PlannerScreen() {
 
       {groups.map((g) => (
         <div key={g.name}>
-          <div className="term-font text-[10px] tracking-widest text-faint mb-2">{g.name}</div>
+          <div className="font-mono text-[10px] tracking-widest text-faint mb-2">{g.name}</div>
           <div className="flex flex-col gap-2">
             {g.items.map((t) => (
-              <div key={t.id} className="bg-panel border border-edge rounded-xl px-4 py-3">
+              <div key={t.id} className="panel rounded-xl px-4 py-3">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => toggleDone(t.id)}
                     className="w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0"
-                    style={{ borderColor: "#4ADE80" }}
+                    style={{ borderColor: "rgb(var(--a-400))" }}
                     aria-label="Done"
                   >
-                    {t.done && <Check size={14} color="#4ADE80" />}
+                    {t.done && <Check size={14} color="rgb(var(--a-400))" />}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-white font-medium truncate">{t.title}</div>
                     <div className="text-xs text-faint mt-0.5 flex items-center gap-1.5">
                       {t.recurringWeekday !== undefined ? <Repeat size={10} /> : t.due ? <Calendar size={10} /> : null}
                       {describe(t)}
-                      {t.notifId ? <Bell size={10} color="#4ADE80" /> : <BellOff size={10} />}
+                      {t.notifId ? <Bell size={10} color="rgb(var(--a-400))" /> : <BellOff size={10} />}
                     </div>
                   </div>
                   {confirmDelete === t.id ? (
@@ -210,17 +210,17 @@ export default function PlannerScreen() {
                       <button
                         onClick={() => deleteTask(t.id)}
                         className="px-2.5 py-1.5 rounded text-[11px] font-bold"
-                        style={{ background: "#F87171", color: "#0A0E1A" }}
+                        style={{ background: "#FB7185", color: "#0A0D0C" }}
                       >
                         Remove
                       </button>
-                      <button onClick={() => setConfirmDelete(null)} className="px-2.5 py-1.5 rounded text-[11px] border border-edge text-mist">
+                      <button onClick={() => setConfirmDelete(null)} className="px-2.5 py-1.5 rounded text-[11px] border border-white/10 text-mist">
                         Keep
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => setConfirmDelete(t.id)} className="p-1 flex-shrink-0" aria-label={`Remove ${t.title}`}>
-                      <X size={15} color="#7A8494" />
+                      <X size={15} color="#7C8983" />
                     </button>
                   )}
                 </div>
@@ -232,21 +232,21 @@ export default function PlannerScreen() {
 
       {doneTasks.length > 0 && (
         <div>
-          <div className="term-font text-[10px] tracking-widest text-faint mb-2">DONE</div>
+          <div className="font-mono text-[10px] tracking-widest text-faint mb-2">DONE</div>
           <div className="flex flex-col gap-2">
             {doneTasks.slice(0, 10).map((t) => (
-              <div key={t.id} className="bg-panel border border-edge rounded-xl px-4 py-2.5 flex items-center gap-3 opacity-60">
+              <div key={t.id} className="panel rounded-xl px-4 py-2.5 flex items-center gap-3 opacity-60">
                 <button
                   onClick={() => toggleDone(t.id)}
                   className="w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0"
-                  style={{ borderColor: "#4ADE80", background: "rgba(74,222,128,0.15)" }}
+                  style={{ borderColor: "rgb(var(--a-400))", background: "rgb(var(--a-400) / .15)" }}
                   aria-label="Undo"
                 >
-                  <Check size={14} color="#4ADE80" />
+                  <Check size={14} color="rgb(var(--a-400))" />
                 </button>
                 <span className="text-sm text-faint line-through truncate flex-1">{t.title}</span>
                 <button onClick={() => deleteTask(t.id)} className="p-1" aria-label={`Remove ${t.title}`}>
-                  <X size={14} color="#7A8494" />
+                  <X size={14} color="#7C8983" />
                 </button>
               </div>
             ))}
