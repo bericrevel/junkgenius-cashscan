@@ -1,3 +1,7 @@
+# Builds an installable debug APK on GitHub's servers — no Android Studio
+# needed on your machine — and publishes it to a permanent Release URL so
+# the same bookmark always has the newest build.
+
 name: Build Android APK
 
 on:
@@ -37,7 +41,7 @@ jobs:
           if [ -f assets/icon.png ]; then
             npx capacitor-assets generate --android
           else
-            echo "assets not uploaded yet - building with default icon"
+            echo "assets/ not uploaded yet — building with default icon"
           fi
 
       - name: Sync web build into native project
@@ -48,19 +52,20 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../cashscan.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../junkgenius.apk
 
       - name: Publish APK to the permanent link
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: JunkGenius CashScan - newest build
+          name: "JunkGenius — newest build"
+          body: "Auto-built from the latest push to main."
           prerelease: true
-          files: cashscan.apk
+          files: junkgenius.apk
 
-      - name: Upload APK artifact
+      - name: Upload APK artifact (per-run backup)
         uses: actions/upload-artifact@v4
         with:
-          name: cashscan-debug-apk
-          path: cashscan.apk
+          name: junkgenius-debug-apk
+          path: junkgenius.apk
           retention-days: 14
