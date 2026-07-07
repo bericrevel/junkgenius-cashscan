@@ -3,26 +3,27 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CashScan</title>
+<title>JunkGenius</title>
 <style>
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #f2ede3; color: #1a1a1a; font-family: system-ui, -apple-system, sans-serif;
+    background: #0A0D0C; color: #B9C4BE; font-family: system-ui, -apple-system, sans-serif;
     text-align: center; padding: 24px; box-sizing: border-box;
   }
   .card { max-width: 340px; }
   .big { font-size: 44px; margin-bottom: 12px; }
-  h1 { font-size: 22px; margin: 0 0 10px; }
-  p { font-size: 15px; line-height: 1.5; color: #4a4a4a; margin: 0; }
-  .hint { margin-top: 18px; font-size: 13px; color: #8a8275; }
+  h1 { font-size: 22px; margin: 0 0 10px; color: #fff; }
+  p { font-size: 15px; line-height: 1.5; margin: 0; }
+  b { color: #34D399; }
+  .hint { margin-top: 18px; font-size: 13px; color: #7C8983; }
 </style>
 </head>
 <body>
   <div class="card">
     <div class="big" id="icon">✅</div>
     <h1 id="head">Payment complete</h1>
-    <p id="text">You're all set. Switch back to the CashScan app and tap
-      <b>“I finished paying — check now”</b>. It can take up to a minute to unlock.</p>
+    <p id="text">You're all set. Switch back to the JunkGenius app and tap
+      <b>"I finished paying — check now"</b>. It can take up to a minute to unlock.</p>
     <p class="hint">You can close this tab.</p>
   </div>
   <script>
@@ -33,11 +34,11 @@
     if (s === "canceled") {
       icon.textContent = "↩️";
       head.textContent = "No charge made";
-      text.innerHTML = "Checkout was canceled — nothing was billed. Switch back to CashScan whenever you're ready.";
+      text.innerHTML = "Checkout was canceled — nothing was billed. Switch back to JunkGenius whenever you're ready.";
     } else if (s === "portal") {
       icon.textContent = "👍";
       head.textContent = "Subscription updated";
-      text.innerHTML = "Any changes you made are saved. Switch back to the CashScan app.";
+      text.innerHTML = "Any changes you made are saved. Switch back to the JunkGenius app.";
     }
   </script>
 </body>
