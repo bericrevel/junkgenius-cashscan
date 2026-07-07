@@ -49,6 +49,17 @@ own full dual-value verdict. The Verdict screen shows "Found N items —
 showing X of N" with Next/Previous, and each item can be added to inventory
 independently.
 
+## Three finishes (v4.2)
+
+Same watch, three crystals: **Emerald** (default), **Sapphire**, and
+**Gold**. The chrome never changes; the glass color family — buttons, bezel
+faces, glows, money text, mirrored lettering, even the near-black base tint —
+swaps as one. Picked on the Home screen ("FINISH"), stored on-device via
+Preferences like everything else personal, no account. Palettes live as
+`[data-theme]` CSS variables in `src/index.css`; Tailwind's accent/ink tokens
+read the same variables, so every `text-abright`-style usage follows the
+active finish automatically.
+
 ## What's in Phase 1 (this build)
 
 The exact five screens mocked and approved: **Onboarding, Home, Scan
