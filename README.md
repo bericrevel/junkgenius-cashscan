@@ -1,5 +1,7 @@
 # JunkGenius · v0.2 — the full merge
 
+<!-- build signature pinned via scripts/debug-keystore.b64 -->
+
 Scan anything. Know what it's worth. Know what to do next.
 
 JunkGenius is the merged flagship — **ScrapScout + JunkGenius CashScan, united**
