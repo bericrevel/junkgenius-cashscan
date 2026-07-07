@@ -3,192 +3,150 @@ import {
   Camera as CameraIcon,
   Loader2,
   Wrench,
-  Tag,
-  TrendingUp,
-  Copy,
   Check,
   AlertTriangle,
   ChevronLeft,
+  ChevronRight,
   Image as ImageIcon,
   RefreshCw,
   X,
+  Home as HomeIcon,
+  Boxes,
+  ScanLine,
   DollarSign,
+  Weight,
+  Plus,
   Zap,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { App as CapApp } from "@capacitor/app";
 import type { PluginListenerHandle } from "@capacitor/core";
-import { takePhoto, pickPhoto, isCancel, CapturedPhoto } from "./lib/camera";
 import { getItem, setItem } from "./lib/storage";
-import { identifyItem, getGuide, getListing, ScanResult, Listing } from "./lib/claude";
-import { refreshEntitlement, startCheckout, restoreByEmail, openPortal, ProState } from "./lib/pro";
+import { takePhoto, pickPhoto, isCancel, CapturedPhoto } from "./lib/camera";
+import { identifyItems, getGuide, ScoutResult } from "./lib/scout";
+import {
+  InventoryItem,
+  loadInventory,
+  saveInventory,
+  fromScan,
+  estimatedValue,
+  realizedCash,
+} from "./lib/inventory";
+import {
+  ProState,
+  refreshEntitlement,
+  loadAiCount,
+  bumpAiCount,
+  startCheckout,
+  restoreByEmail,
+  openPortal,
+} from "./lib/pro";
 
-// Colors darkened from v0.1 so white labels pass WCAG contrast —
-// this audience skews toward older eyes and sun-glared screens.
-const MOVES: Record<string, { label: string; color: string }> = {
-  repair: { label: "REPAIR IT", color: "#24702f" },
-  part_out: { label: "PART IT OUT", color: "#b06f00" },
-  repurpose: { label: "MAKE SOMETHING ELSE", color: "#275f8f" },
-  scrap: { label: "SCRAP IT", color: "#454545" },
-  avoid: { label: "SKIP THIS ONE", color: "#b0332b" },
+// ---- Move styling — chrome/emerald identity ----
+const MOVES: Record<string, { label: string; sub: string }> = {
+  resell: { label: "RESELL IT", sub: "Worth more whole than as metal" },
+  scrap: { label: "SCRAP IT", sub: "Fastest cash — take it to the yard" },
+  part_out: { label: "PART IT OUT", sub: "The pieces beat the whole" },
+  skip: { label: "SKIP IT", sub: "Not worth your time" },
 };
 
-// Every move gets a real guide now — scrapping is a skill too, and for the
-// users with no tools it's the fastest cash path.
-const GUIDE_TITLES: Record<string, string> = {
-  repair: "Repair Guide",
-  part_out: "Part-Out Guide",
-  repurpose: "Repurpose Guide",
-  scrap: "Scrap-It Guide",
-};
-
-const LEDGER_KEY = "cashscan:ledger";
-interface LedgerEntry {
-  id: string;
-  item: string;
-  category: string;
-  profit: number;
-  date: number;
-}
-async function loadLedger(): Promise<LedgerEntry[]> {
-  const raw = await getItem(LEDGER_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-async function saveLedger(ledger: LedgerEntry[]) {
-  await setItem(LEDGER_KEY, JSON.stringify(ledger));
-}
-
-type Screen = "scan" | "result" | "guide" | "listing" | "tracker" | "pro";
-
-// The deal: everything is free until CashScan has either put $100 of tracked
-// cash in your pocket OR run 150 scans — whichever lands first. After that,
-// NEW scans need Pro. Your ledger, your numbers, and your past results stay
-// free forever. Never ransom someone's own data.
-//
-// Why two triggers: the ledger is self-reported, and the lie that benefits a
-// user is silence (scan forever, never log a sale). The scan counter is the
-// honor-system backstop — it catches the heavy-scanner-who-never-logs without
-// surveilling anyone. It lives on-device like everything else; a reinstall
-// resets it, and we accept that: anyone motivated enough to reinstall monthly
-// was never going to pay, and scans only cost us pennies.
-const PRO_TRIGGER = 100;
-const SCAN_TRIGGER = 150;
-const SCANS_KEY = "cashscan:scanCount";
-// Display strings only — the REAL prices live in Stripe (see README).
-// If you change them in Stripe, change them here too.
+const ONBOARD_KEY = "junkgenius:onboarded";
+// Fair gate (unchanged philosophy): free until either trigger lands.
+const CASH_TRIGGER = 100;
+const AI_TRIGGER = 150;
 const PRICE_MONTHLY_LABEL = "$3.99 / month";
 const PRICE_ANNUAL_LABEL = "$24 / year";
 
+type Screen = "onboarding" | "home" | "scan" | "verdict" | "guide" | "inventory" | "pro";
+
 function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3.5 bg-[#1a1a1a] text-white">
-      <div className="flex items-center gap-2 min-w-0">
-        {onBack && (
-          <button onClick={onBack} className="p-1 -ml-1" aria-label="Back">
-            <ChevronLeft size={22} />
-          </button>
-        )}
-        <span className="display-font text-lg tracking-wide truncate">{title}</span>
+    <div className="flex items-center gap-2 px-4 py-3.5 border-b border-white/[.06] relative z-10">
+      {onBack && (
+        <button onClick={onBack} className="p-1 -ml-1" aria-label="Back">
+          <ChevronLeft size={22} className="text-mist" />
+        </button>
+      )}
+      <span className="font-disp font-bold text-lg text-white truncate">{title}</span>
+      {right && <div className="ml-auto">{right}</div>}
+    </div>
+  );
+}
+
+function LogoMark({ size = 30 }: { size?: number }) {
+  return (
+    <div className="bezel rounded-xl flex-shrink-0" style={{ width: size, height: size }}>
+      <div className="bezel-face green">
+        <Sparkles size={size * 0.46} />
       </div>
-      {right}
     </div>
   );
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("scan");
+  const [screen, setScreen] = useState<Screen>("home");
+  const [checkingOnboard, setCheckingOnboard] = useState(true);
+
+  // ---- Scan / multi-item verdict ----
   const [photo, setPhoto] = useState<CapturedPhoto | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScanResult | null>(null);
+  const [results, setResults] = useState<ScoutResult[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set());
 
   const [guideText, setGuideText] = useState<string | null>(null);
   const [guideTruncated, setGuideTruncated] = useState(false);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
 
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [listingError, setListingError] = useState<string | null>(null);
-  const [listingLoading, setListingLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  // ---- Inventory ----
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const [saleModal, setSaleModal] = useState(false);
-  const [salePrice, setSalePrice] = useState("");
+  const [cashModal, setCashModal] = useState<{ id: string; as: "sold" | "scrapped" } | null>(null);
+  const [cashPrice, setCashPrice] = useState("");
 
-  const [scanCount, setScanCount] = useState(0);
+  // ---- Pro gate ----
   const [proState, setProState] = useState<ProState | null>(null);
+  const [aiCount, setAiCount] = useState(0);
   const [proBusy, setProBusy] = useState<"" | "monthly" | "annual" | "check" | "restore" | "portal">("");
   const [proNotice, setProNotice] = useState<string | null>(null);
   const [proError, setProError] = useState<string | null>(null);
   const [restoreEmail, setRestoreEmail] = useState("");
 
   useEffect(() => {
-    loadLedger().then(setLedger);
+    getItem(ONBOARD_KEY).then((v) => {
+      if (!v) setScreen("onboarding");
+      setCheckingOnboard(false);
+    });
+    loadInventory().then(setInventory);
     refreshEntitlement().then(setProState);
-    getItem(SCANS_KEY).then((v) => setScanCount(v ? parseInt(v, 10) || 0 : 0));
+    loadAiCount().then(setAiCount);
   }, []);
 
-  const totalProfit = ledger.reduce((s, l) => s + l.profit, 0);
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const weekProfit = ledger.filter((l) => l.date > weekAgo).reduce((s, l) => s + l.profit, 0);
-  const categoryTotals = ledger.reduce<Record<string, number>>((acc, l) => {
-    acc[l.category] = (acc[l.category] || 0) + l.profit;
-    return acc;
-  }, {});
-  const bestCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
-  const isPro = !!proState?.pro;
-  // Gate NEW scans only, once either trigger lands. When both have landed,
-  // the profit story wins the copy — it's the flattering one.
-  const profitGate = totalProfit >= PRO_TRIGGER;
-  const scanGate = scanCount >= SCAN_TRIGGER;
-  const proGateActive = (profitGate || scanGate) && !isPro;
-  const gateReason: "profit" | "scans" | null = !proGateActive ? null : profitGate ? "profit" : "scans";
-
-  // People type "$40" when the placeholder is "$" — strip it instead of
-  // silently doing nothing (the old behavior looked like a dead button).
-  const cleanedPrice = salePrice.replace(/[^0-9.]/g, "");
-  const parsedPrice = parseFloat(cleanedPrice);
-  const priceValid = cleanedPrice !== "" && Number.isFinite(parsedPrice) && parsedPrice >= 0;
-
-  const resetScan = useCallback(() => {
-    setPhoto(null);
-    setResult(null);
-    setScanError(null);
-    setGuideText(null);
-    setGuideTruncated(false);
-    setGuideError(null);
-    setListing(null);
-    setListingError(null);
-    setScreen("scan");
-  }, []);
-
-  // ---- Android hardware back button (Capacitor) ----
-  // Without this, hardware back exits the app from ANY screen, dumping the
-  // scan (and costing another upload + API call to get it back). Map it to
-  // the same in-app navigation the on-screen back arrows use.
-  const screenRef = useRef<Screen>("scan");
-  const saleModalRef = useRef(false);
+  const screenRef = useRef<Screen>("home");
+  const cashModalRef = useRef(false);
   useEffect(() => {
     screenRef.current = screen;
   }, [screen]);
   useEffect(() => {
-    saleModalRef.current = saleModal;
-  }, [saleModal]);
+    cashModalRef.current = cashModal !== null;
+  }, [cashModal]);
+
   useEffect(() => {
     let handle: PluginListenerHandle | undefined;
     let unmounted = false;
     CapApp.addListener("backButton", () => {
-      if (saleModalRef.current) {
-        setSaleModal(false);
+      if (cashModalRef.current) {
+        setCashModal(null);
         return;
       }
       const s = screenRef.current;
-      if (s === "guide" || s === "listing") setScreen("result");
-      else if (s === "tracker" || s === "pro") setScreen("scan");
-      else if (s === "result") resetScan();
-      else CapApp.exitApp();
+      if (s === "guide") setScreen("verdict");
+      else if (s === "verdict") resetScan();
+      else if (s === "home") CapApp.exitApp();
+      else setScreen("home");
     }).then((h) => {
       if (unmounted) h.remove();
       else handle = h;
@@ -197,17 +155,14 @@ export default function App() {
       unmounted = true;
       handle?.remove();
     };
-  }, [resetScan]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Re-check Pro when the app comes back to the foreground — this is how the
-  // unlock lands after the user finishes Stripe Checkout in the browser tab.
   useEffect(() => {
     let handle: PluginListenerHandle | undefined;
     let unmounted = false;
     CapApp.addListener("appStateChange", ({ isActive }) => {
       if (!isActive) return;
-      // Force a network check if they're sitting on the Pro screen (they
-      // probably just paid); otherwise the 6h cache is fine.
       refreshEntitlement({ force: screenRef.current === "pro" }).then(setProState);
     }).then((h) => {
       if (unmounted) h.remove();
@@ -219,26 +174,52 @@ export default function App() {
     };
   }, []);
 
+  const est = estimatedValue(inventory);
+  const cash = realizedCash(inventory);
+  const onHand = inventory.filter((i) => i.status === "have");
+
+  const isPro = !!proState?.pro;
+  const cashGate = cash >= CASH_TRIGGER;
+  const actionsGate = aiCount >= AI_TRIGGER;
+  const proGateActive = (cashGate || actionsGate) && !isPro;
+  const gateReason: "cash" | "actions" | null = !proGateActive ? null : cashGate ? "cash" : "actions";
+
+  const onAiAction = () => setAiCount((prev) => { bumpAiCount(prev); return prev + 1; });
+
+  const resetScan = useCallback(() => {
+    setPhoto(null);
+    setResults([]);
+    setActiveIndex(0);
+    setSavedIdx(new Set());
+    setScanError(null);
+    setGuideText(null);
+    setGuideTruncated(false);
+    setGuideError(null);
+    setScreen("scan");
+  }, []);
+
+  const finishOnboarding = async () => {
+    await setItem(ONBOARD_KEY, "1");
+    setScreen("home");
+  };
+
   // ---- Scan flow ----
   const runScan = async (p: CapturedPhoto) => {
     setPhoto(p);
     setScanError(null);
     setScanning(true);
     try {
-      const parsed = await identifyItem(p.base64, p.mediaType);
-      if (parsed.item === "unclear") {
-        setScanError(parsed.reason || "Couldn't get a clear read. Try one more angle, closer up.");
+      const items = await identifyItems(p.base64, p.mediaType);
+      if (items.length === 0) {
+        setScanError("Couldn't find anything to price in that photo. Try again with better light, closer up.");
       } else {
-        // Count only scans that delivered a usable verdict — failed reads and
-        // network errors never count against the 150 free scans.
-        const n = scanCount + 1;
-        setScanCount(n);
-        setItem(SCANS_KEY, String(n));
-        setResult(parsed);
-        setScreen("result");
+        onAiAction(); // one successful scan action, regardless of item count
+        setResults(items);
+        setActiveIndex(0);
+        setSavedIdx(new Set());
+        setScreen("verdict");
       }
     } catch (err) {
-      // Messages from lib/claude.ts are already written for the user.
       setScanError(err instanceof Error ? err.message : "Scan failed. Tap Try Again.");
     } finally {
       setScanning(false);
@@ -254,7 +235,7 @@ export default function App() {
       const p = await takePhoto();
       await runScan(p);
     } catch (err) {
-      if (isCancel(err)) return; // backing out of the camera isn't an error
+      if (isCancel(err)) return;
       setScanError(err instanceof Error ? err.message : "Camera failed. Try again.");
     }
   };
@@ -273,13 +254,25 @@ export default function App() {
     }
   };
 
-  // Retry re-sends the photo we already have — a retake costs the user data
-  // and time; a retry costs nothing.
   const retryScan = () => {
     if (photo) runScan(photo);
   };
 
-  // ---- Guide flow (repair / part-out / repurpose / scrap) ----
+  const result = results[activeIndex] as ScoutResult | undefined;
+  const move = result ? MOVES[result.move] || MOVES.scrap : null;
+
+  const goNextItem = () => {
+    setGuideText(null);
+    setGuideError(null);
+    setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+  };
+  const goPrevItem = () => {
+    setGuideText(null);
+    setGuideError(null);
+    setActiveIndex((i) => Math.max(i - 1, 0));
+  };
+
+  // ---- Guide ----
   const runGuide = useCallback(async () => {
     if (!result) return;
     setGuideLoading(true);
@@ -288,6 +281,7 @@ export default function App() {
     setScreen("guide");
     try {
       const reply = await getGuide(result);
+      onAiAction();
       setGuideText(reply.text);
       setGuideTruncated(reply.truncated);
     } catch (err) {
@@ -296,65 +290,47 @@ export default function App() {
     } finally {
       setGuideLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
-  // ---- Listing flow ----
-  const runListing = useCallback(async () => {
-    if (!result) return;
-    setListingLoading(true);
-    setListingError(null);
-    setScreen("listing");
-    try {
-      setListing(await getListing(result));
-    } catch (err) {
-      setListing(null);
-      setListingError(err instanceof Error ? err.message : "Couldn't build the listing. Try again.");
-    } finally {
-      setListingLoading(false);
-    }
-  }, [result]);
-
-  const copyListing = () => {
-    if (!listing) return;
-    const text = `${listing.title}\n\n${listing.description}\n\n$${listing.price}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+  // ---- Inventory ----
+  const addActiveToInventory = async () => {
+    if (!result || savedIdx.has(activeIndex)) return;
+    const next = [fromScan(result), ...inventory];
+    setInventory(next);
+    setSavedIdx((s) => new Set(s).add(activeIndex));
+    await saveInventory(next);
   };
 
-  // ---- Sale tracking ----
-  const confirmSale = async () => {
-    if (!priceValid || !result) return;
-    const entry: LedgerEntry = {
-      id: `${Date.now()}`,
-      item: result.item,
-      category: result.category,
-      profit: parsedPrice,
-      date: Date.now(),
-    };
-    const next = [...ledger, entry];
-    setLedger(next);
-    await saveLedger(next);
-    setSaleModal(false);
-    setSalePrice("");
-    setScreen("tracker");
+  const cleanedPrice = cashPrice.replace(/[^0-9.]/g, "");
+  const parsedPrice = parseFloat(cleanedPrice);
+  const priceValid = cleanedPrice !== "" && Number.isFinite(parsedPrice) && parsedPrice >= 0;
+
+  const confirmCash = async () => {
+    if (!cashModal || !priceValid) return;
+    const next = inventory.map((i) =>
+      i.id === cashModal.id ? { ...i, status: cashModal.as, cashedFor: parsedPrice, cashedAt: Date.now() } : i
+    );
+    setInventory(next);
+    setCashModal(null);
+    setCashPrice("");
+    await saveInventory(next);
   };
 
-  const deleteEntry = async (id: string) => {
-    const next = ledger.filter((l) => l.id !== id);
-    setLedger(next);
+  const deleteItem = async (id: string) => {
+    const next = inventory.filter((i) => i.id !== id);
+    setInventory(next);
     setPendingDelete(null);
-    await saveLedger(next);
+    await saveInventory(next);
   };
 
-  // ---- Pro (Stripe) ----
+  // ---- Pro actions ----
   const buyPlan = async (plan: "monthly" | "annual") => {
     setProBusy(plan);
     setProError(null);
     setProNotice(null);
     try {
-      await startCheckout(plan); // opens Stripe Checkout in a browser tab
+      await startCheckout(plan);
       setProNotice('Finish up in the browser tab, then come back and tap "I finished paying — check now."');
     } catch (err) {
       setProError(err instanceof Error ? err.message : "Couldn't start checkout. Try again.");
@@ -362,25 +338,19 @@ export default function App() {
       setProBusy("");
     }
   };
-
   const checkPayment = async () => {
     setProBusy("check");
     setProError(null);
     try {
       const s = await refreshEntitlement({ force: true });
       setProState(s);
-      if (s.pro) {
-        setProNotice(null);
-      } else {
-        setProNotice("Not showing yet — fresh payments can take up to a minute to register. Give it a moment and tap again.");
-      }
+      setProNotice(s.pro ? null : "Not showing yet — fresh payments can take a minute. Give it a moment and tap again.");
     } catch (err) {
       setProError(err instanceof Error ? err.message : "Couldn't check. Try again.");
     } finally {
       setProBusy("");
     }
   };
-
   const doRestore = async () => {
     setProBusy("restore");
     setProError(null);
@@ -388,8 +358,6 @@ export default function App() {
     try {
       const r = await restoreByEmail(restoreEmail.trim());
       if (r.pro) {
-        // Restore verified the subscription directly — no need to wait for
-        // Stripe's search index to catch up.
         setProState({ pro: true, checkedAt: Date.now(), source: "network" });
         setRestoreEmail("");
       } else {
@@ -401,7 +369,6 @@ export default function App() {
       setProBusy("");
     }
   };
-
   const managePlan = async () => {
     setProBusy("portal");
     setProError(null);
@@ -414,575 +381,456 @@ export default function App() {
     }
   };
 
-  const move = result ? MOVES[result.move] || MOVES.scrap : null;
+  const TabBar = () => (
+    <div className="flex border-t border-white/[.06] bg-ink2/60 backdrop-blur relative z-10">
+      {(
+        [
+          { id: "home", label: "Home", icon: HomeIcon, go: () => setScreen("home") },
+          { id: "scan", label: "Scan", icon: ScanLine, go: resetScan },
+          { id: "inventory", label: "Items", icon: Boxes, go: () => setScreen("inventory") },
+          { id: "pro", label: "Pro", icon: Zap, go: () => setScreen("pro") },
+        ] as const
+      ).map((t) => {
+        const active = screen === t.id || (t.id === "scan" && (screen === "verdict" || screen === "guide"));
+        const Icon = t.icon;
+        return (
+          <button key={t.id} onClick={t.go} className="flex-1 flex flex-col items-center gap-1 py-2.5">
+            <Icon size={19} className={active ? "text-abright" : "text-faint"} strokeWidth={active ? 2.4 : 2} />
+            <span className={`font-mono text-[9.5px] tracking-widest ${active ? "text-abright" : "text-faint"}`}>
+              {t.label.toUpperCase()}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
-  const bigButtonAction = () => {
-    if (!result) return;
-    if (result.move === "avoid") resetScan();
-    else runGuide(); // every other move has a real guide now — scrap included
-  };
+  if (checkingOnboard) {
+    return <div className="h-screen w-full bg-ink" />;
+  }
 
   return (
-    <div className="h-screen w-full flex flex-col bg-[#f2ede3] text-[#1a1a1a] overflow-hidden">
-      {/* SCAN */}
+    <div className="h-screen w-full flex flex-col bg-ink text-mist overflow-hidden font-sans">
+      {/* ============ ONBOARDING ============ */}
+      {screen === "onboarding" && (
+        <div className="flex-1 flex flex-col items-center justify-center px-8 relative">
+          <div className="chromering" style={{ width: 186, height: 186 }}>
+            <div className="glint" />
+            <div className="core">
+              <div className="core-content font-mono text-[11px] font-bold leading-tight">14K GOLD<br />RING</div>
+            </div>
+          </div>
+          <h1 className="font-disp font-bold text-[28px] text-white mt-8 text-center leading-tight">Scan anything.</h1>
+          <div className="mt-3 font-mono text-[10.5px] tracking-widest uppercase text-abright border border-abright/30 bg-abright/[.06] rounded-full px-4 py-1.5">
+            Point · Identify · Get paid
+          </div>
+          <p className="mt-5 text-center text-[13.5px] text-faint leading-relaxed max-w-[280px]">
+            Point your camera at a whole pile — electronics, appliances, jewelry, auto parts, scrap. JunkGenius finds every item, prices each one, and tells you the smartest move.
+          </p>
+          <div className="absolute left-6 right-6 bottom-8">
+            <button onClick={finishOnboarding} className="gbtn w-full py-4 rounded-2xl font-disp font-bold text-base">
+              <span>Get started</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============ HOME ============ */}
+      {screen === "home" && (
+        <>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-6 pt-9 pb-5 flex items-center gap-3">
+              <LogoMark size={34} />
+              <div>
+                <div className="font-disp font-bold text-lg text-white leading-tight">
+                  Junk<span className="green-text">Genius</span>
+                </div>
+                <div className="text-[11px] text-faint">Point. Identify. Get paid.</div>
+              </div>
+              {isPro && (
+                <div className="ml-auto flex items-center gap-1 text-[10px] font-mono text-abright border border-abright/30 bg-abright/[.06] rounded-full px-2.5 py-1">
+                  <Zap size={11} /> PRO
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 flex flex-col gap-4 pb-6">
+              <button onClick={resetScan} className="gbtn w-full py-6 rounded-2xl font-disp font-bold text-xl tracking-wide flex items-center justify-center gap-3">
+                <ScanLine size={24} /> <span>SCAN SOMETHING</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="panel p-4">
+                  <div className="font-mono font-bold text-lg text-white">${est.low}–${est.high}</div>
+                  <div className="text-[10.5px] text-faint mt-1">est. value on hand · {onHand.length} item{onHand.length === 1 ? "" : "s"}</div>
+                </div>
+                <div className="panel p-4">
+                  <div className="font-mono font-bold text-lg green-text">${cash.toFixed(0)}</div>
+                  <div className="text-[10.5px] text-faint mt-1">real cash collected</div>
+                </div>
+              </div>
+
+              {inventory.length > 0 ? (
+                <div>
+                  <div className="font-mono text-[10px] tracking-widest text-faint mb-2">RECENT</div>
+                  <div className="flex flex-col gap-2">
+                    {inventory.slice(0, 4).map((i) => (
+                      <button key={i.id} onClick={() => setScreen("inventory")} className="panel flex items-center justify-between px-4 py-3 text-left">
+                        <div className="min-w-0">
+                          <div className="text-sm text-white font-medium truncate">{i.item}</div>
+                          <div className="text-[11px] text-faint">{i.status === "have" ? "ON HAND" : i.status.toUpperCase()}</div>
+                        </div>
+                        <div className="font-mono text-sm text-mist flex-shrink-0 ml-3">
+                          {i.status === "sold" || i.status === "scrapped" ? `$${(i.cashedFor || 0).toFixed(0)}` : `$${Math.max(i.scrapHigh, i.resaleHigh)}`}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="panel p-5 text-sm text-faint">
+                  Nothing scanned yet. Point the camera at that busted thing in the yard — let's see what it's worth.
+                </div>
+              )}
+
+              {isPro ? (
+                <div className="panel p-4" style={{ borderColor: "rgba(16,185,129,.35)" }}>
+                  <div className="flex items-center gap-2 text-sm text-white font-semibold"><Zap size={15} className="green-text" /> JunkGenius Pro — active</div>
+                  <button onClick={() => setScreen("pro")} className="text-xs text-faint underline mt-1">manage subscription</button>
+                </div>
+              ) : proGateActive ? (
+                <div className="panel p-4" style={{ borderColor: "rgba(16,185,129,.35)" }}>
+                  <div className="text-sm text-white font-semibold">
+                    {gateReason === "cash" ? `You've collected $${cash.toFixed(0)} with JunkGenius. 🎉` : `You've used your ${AI_TRIGGER} free AI actions.`}
+                  </div>
+                  <div className="text-xs text-faint mt-1">The free deal was $100 collected or {AI_TRIGGER} AI actions. Your inventory stays free forever either way.</div>
+                  <button onClick={() => setScreen("pro")} className="gbtn mt-3 w-full py-2.5 rounded-xl font-disp font-bold text-sm"><span>SEE PRO</span></button>
+                </div>
+              ) : aiCount >= Math.floor(AI_TRIGGER / 2) ? (
+                <div className="panel px-4 py-3 text-[11px] text-faint">
+                  Free AI actions used: <b className="text-mist">{aiCount} of {AI_TRIGGER}</b>. Free until $100 collected or {AI_TRIGGER} actions.
+                </div>
+              ) : null}
+
+              <div className="text-[11px] text-faint text-center pt-1">
+                Values are AI estimates — yards and buyers set real prices. Your inventory stays on this phone.
+              </div>
+            </div>
+          </div>
+          <TabBar />
+        </>
+      )}
+
+      {/* ============ SCAN ============ */}
       {screen === "scan" && (
         <>
-          <TopBar
-            title="CashScan"
-            right={
-              <button onClick={() => setScreen("tracker")} className="p-1" aria-label="Your numbers">
-                <TrendingUp size={22} />
-              </button>
-            }
-          />
+          <TopBar title="Scan" onBack={() => setScreen("home")} />
           <div className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
-            {photo && !result && (
-              <img src={photo.previewUrl} alt="scanned item" className="w-48 h-48 object-cover rounded-lg border-4 border-[#1a1a1a]" />
+            {photo && (
+              <img src={photo.previewUrl} alt="scanned" className="w-48 h-48 object-cover rounded-2xl border-2 border-white/10" />
             )}
             {!photo && (
               <>
-                <CameraIcon size={56} strokeWidth={1.5} />
-                <div className="text-center sans-font text-[#4a4a4a] max-w-xs">
-                  Scan a piece of junk. We'll tell you what it's worth and what to do next.
+                <div className="bezel rounded-full" style={{ width: 88, height: 88 }}>
+                  <div className="bezel-face green"><CameraIcon size={38} /></div>
+                </div>
+                <div className="text-center text-mist max-w-xs text-sm">
+                  Electronics, appliances, auto parts, furniture, tools, or a whole pile — point at it and JunkGenius finds every item.
                 </div>
               </>
             )}
             {scanError && (
-              <div className="w-full max-w-sm bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-4 text-sm sans-font flex gap-2">
-                <AlertTriangle size={18} className="flex-shrink-0 text-[#b0332b]" />
+              <div className="panel w-full max-w-sm p-4 text-sm flex gap-2" style={{ borderColor: "rgba(251,113,133,.3)" }}>
+                <AlertTriangle size={18} className="flex-shrink-0 text-rose" />
                 <span>{scanError}</span>
               </div>
             )}
             {scanning && (
               <div className="flex flex-col items-center gap-3">
-                <Loader2 size={40} className="animate-spin" color="#b06f00" />
-                <div className="sans-font text-[#4a4a4a]">Reading it...</div>
+                <Loader2 size={40} className="animate-spin green-text" />
+                <div className="font-mono text-sm tracking-widest text-faint">IDENTIFYING...</div>
               </div>
             )}
             {!scanning && photo && scanError && (
               <div className="w-full max-w-sm flex flex-col gap-3">
-                <button
-                  onClick={retryScan}
-                  className="w-full py-5 rounded-xl huge-font text-xl tracking-wide flex items-center justify-center gap-3"
-                  style={{ background: "#1a1a1a", color: "#f2ede3" }}
-                >
-                  <RefreshCw size={20} /> TRY AGAIN
+                <button onClick={retryScan} className="gbtn w-full py-4 rounded-2xl font-disp font-bold text-lg flex items-center justify-center gap-2">
+                  <RefreshCw size={18} /> <span>TRY AGAIN</span>
                 </button>
-                <button
-                  onClick={resetScan}
-                  className="w-full py-3 rounded-xl sans-font font-semibold border-2 border-[#1a1a1a]"
-                >
-                  Scan a different item
-                </button>
+                <div className="cbtn w-full h-[52px]"><button onClick={resetScan} className="cbtn-in w-full h-full">Scan a different item</button></div>
               </div>
             )}
             {!scanning && !(photo && scanError) && (
               <div className="w-full max-w-sm flex flex-col gap-3">
-                <button
-                  onClick={onTakePhoto}
-                  className="w-full py-5 rounded-xl huge-font text-xl tracking-wide"
-                  style={{ background: "#1a1a1a", color: "#f2ede3" }}
-                >
-                  SCAN IT
-                </button>
-                <button
-                  onClick={onPickPhoto}
-                  className="w-full py-3 rounded-xl sans-font font-semibold border-2 border-[#1a1a1a] flex items-center justify-center gap-2"
-                >
-                  <ImageIcon size={16} /> Choose from gallery
-                </button>
+                <button onClick={onTakePhoto} className="gbtn w-full py-5 rounded-2xl font-disp font-bold text-xl tracking-wide"><span>SCAN IT</span></button>
+                <div className="cbtn w-full h-[52px]">
+                  <button onClick={onPickPhoto} className="cbtn-in w-full h-full flex items-center justify-center gap-2">
+                    <ImageIcon size={16} /> Choose from gallery
+                  </button>
+                </div>
               </div>
             )}
           </div>
+          <TabBar />
         </>
       )}
 
-      {/* RESULT */}
-      {screen === "result" && result && move && (
+      {/* ============ VERDICT (multi-item aware) ============ */}
+      {screen === "verdict" && result && move && (
         <>
-          <TopBar title="Result" onBack={resetScan} />
-          <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
+          <TopBar title="Verdict" onBack={resetScan} />
+          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+            {results.length > 1 && (
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-[10px] tracking-widest text-faint">
+                  FOUND {results.length} ITEMS · SHOWING {activeIndex + 1} OF {results.length}
+                </div>
+                <div className="flex gap-1.5">
+                  <button onClick={goPrevItem} disabled={activeIndex === 0} className="cbtn w-8 h-8 disabled:opacity-30">
+                    <div className="cbtn-in"><ChevronLeft size={15} /></div>
+                  </button>
+                  <button onClick={goNextItem} disabled={activeIndex === results.length - 1} className="cbtn w-8 h-8 disabled:opacity-30">
+                    <div className="cbtn-in"><ChevronRight size={15} /></div>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
-              {photo && (
-                <img src={photo.previewUrl} alt={result.item} className="w-16 h-16 object-cover rounded-lg border-2 border-[#1a1a1a] flex-shrink-0" />
-              )}
-              <div className="display-font text-2xl leading-tight">{result.item}</div>
+              {photo && <img src={photo.previewUrl} alt={result.item} className="w-14 h-14 object-cover rounded-xl border border-white/10 flex-shrink-0" />}
+              <div className="min-w-0">
+                <div className="font-disp font-bold text-lg text-white leading-tight">{result.item}</div>
+                <div className="text-[11px] text-faint mt-0.5">{result.condition || result.category}</div>
+              </div>
             </div>
 
-            <div className="sans-font text-sm text-[#4a4a4a]">
-              ${result.valueRepairedLow}–${result.valueRepairedHigh} fixed &nbsp;·&nbsp; ${result.valueScrapLow}–${result.valueScrapHigh} scrap
+            <div className="flex gap-3">
+              <div className="flex-1 rounded-2xl p-3.5" style={{ background: "linear-gradient(180deg,rgba(170,182,184,.10),rgba(170,182,184,.02))", border: "1px solid rgba(170,182,184,.25)" }}>
+                <div className="font-mono text-[9px] tracking-widest uppercase text-faint">At the yard</div>
+                <div className="font-mono font-extrabold text-xl text-white mt-1.5">${result.scrapLow}–${result.scrapHigh}</div>
+                {result.weightLbs > 0 && <div className="text-[10px] text-faint mt-1 flex items-center gap-1"><Weight size={10} /> ~{result.weightLbs} lbs</div>}
+              </div>
+              <div className="flex-1 rounded-2xl p-3.5" style={{ background: "linear-gradient(180deg,rgba(16,185,129,.14),rgba(16,185,129,.02))", border: "1px solid rgba(16,185,129,.3)" }}>
+                <div className="font-mono text-[9px] tracking-widest uppercase text-faint">Resold whole</div>
+                <div className="font-mono font-extrabold text-xl green-text mt-1.5">${result.resaleLow}–${result.resaleHigh}</div>
+                <div className="text-[10px] text-faint mt-1">used market</div>
+              </div>
             </div>
 
-            <button
-              className="w-full rounded-xl py-6 flex flex-col items-center gap-1 shadow-sm"
-              style={{ background: move.color }}
-              onClick={bigButtonAction}
-            >
-              <span className="huge-font text-2xl text-white tracking-wide">{move.label}</span>
-              <span className="sans-font text-sm text-white/95">
-                {result.move === "scrap" || result.move === "avoid"
-                  ? result.reason
-                  : `Est. profit: $${result.profitLow}–$${result.profitHigh}`}
-              </span>
-              <span className="sans-font text-xs text-white/80 mt-0.5">
-                {result.move === "avoid" ? "Tap to scan the next one" : "Tap for the how-to"}
-              </span>
-            </button>
+            <div className="gbtn rounded-2xl p-4 text-center">
+              <div className="font-disp font-bold text-xl">{move.label}</div>
+              <div className="text-[11.5px] mt-0.5" style={{ color: "rgba(255,255,255,.8)" }}>{result.reason || move.sub}</div>
+            </div>
 
             {result.safetyWarning && (
-              <div className="bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-3 text-sm sans-font flex gap-2">
-                <AlertTriangle size={18} className="flex-shrink-0 text-[#b0332b]" />
-                <span>{result.safetyWarning}</span>
+              <div className="rounded-xl p-3 text-sm flex gap-2" style={{ background: "rgba(251,113,133,.08)", border: "1px solid rgba(251,113,133,.28)" }}>
+                <AlertTriangle size={17} className="flex-shrink-0 text-rose" />
+                <span style={{ color: "#ffd3da" }}>{result.safetyWarning}</span>
               </div>
             )}
 
-            <div className="sans-font text-sm text-[#4a4a4a]">
-              {result.difficulty.charAt(0).toUpperCase() + result.difficulty.slice(1)} · {result.timeEstimate}
-            </div>
-
-            <div className="flex gap-3 mt-2">
-              {result.move !== "avoid" && (
-                <button
-                  onClick={runGuide}
-                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-lg border-2 border-[#1a1a1a] sans-font font-semibold"
-                >
-                  <Wrench size={16} /> Show me how
-                </button>
-              )}
-              {(result.move === "repair" || result.move === "part_out") && (
-                <button
-                  onClick={runListing}
-                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-lg sans-font font-semibold text-white"
-                  style={{ background: "#1a1a1a" }}
-                >
-                  <Tag size={16} /> List it
-                </button>
-              )}
-            </div>
-
-            {/* Scrap sales are cash too — the ledger used to be unreachable
-                unless the move produced a listing. Now every sellable outcome
-                can be tracked, including a scrapyard payout. */}
-            {result.move !== "avoid" && (
-              <button
-                onClick={() => setSaleModal(true)}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg border-2 sans-font font-semibold"
-                style={{ borderColor: "#24702f", color: "#24702f" }}
-              >
-                <DollarSign size={16} /> Sold it? Track the cash
-              </button>
+            {result.materials.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {result.materials.map((m, i) => (
+                  <span key={i} className="font-mono text-[10px] text-mist border border-white/10 rounded-full px-3 py-1 bg-white/[.03]">
+                    {m.name}{m.estLbs > 0 ? ` · ~${m.estLbs} lb` : ""}
+                  </span>
+                ))}
+              </div>
             )}
 
-            <button onClick={resetScan} className="mt-2 text-center text-sm sans-font text-[#4a4a4a] underline">
-              Scan another item
-            </button>
+            <div className="flex gap-2.5">
+              <div className="cbtn flex-1 h-11"><button onClick={runGuide} className="cbtn-in w-full h-full flex items-center justify-center gap-2 text-xs"><Wrench size={14} /> Show me how</button></div>
+              {savedIdx.has(activeIndex) ? (
+                <div className="flex-1 rounded-2xl h-11 flex items-center justify-center gap-2 text-xs font-bold" style={{ border: "1px solid rgba(16,185,129,.4)", color: "#34D399", background: "rgba(16,185,129,.06)" }}>
+                  <Check size={14} /> IN INVENTORY
+                </div>
+              ) : (
+                <button onClick={addActiveToInventory} className="gbtn flex-1 h-11 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold">
+                  <Plus size={14} /> <span>ADD TO INVENTORY</span>
+                </button>
+              )}
+            </div>
+
+            {results.length > 1 && activeIndex < results.length - 1 && (
+              <button onClick={goNextItem} className="cbtn h-11"><div className="cbtn-in flex items-center justify-center gap-1.5 text-sm">Next item <ChevronRight size={15} /></div></button>
+            )}
+
+            <button onClick={resetScan} className="text-center text-sm text-faint underline pb-2">Scan something else</button>
+            <div className="text-[11px] text-faint text-center pb-4 -mt-2">Estimates, not appraisals. Yard prices vary — call ahead.</div>
           </div>
+          <TabBar />
         </>
       )}
 
-      {/* GUIDE (repair / part-out / repurpose / scrap) */}
+      {/* ============ GUIDE ============ */}
       {screen === "guide" && (
         <>
-          <TopBar title={(result && GUIDE_TITLES[result.move]) || "Guide"} onBack={() => setScreen("result")} />
+          <TopBar title="Show Me How" onBack={() => setScreen("verdict")} />
           <div className="flex-1 overflow-y-auto px-5 py-5">
             {guideLoading ? (
-              <div className="flex flex-col items-center gap-3 mt-12">
-                <Loader2 size={32} className="animate-spin" color="#b06f00" />
-                <div className="sans-font text-[#4a4a4a]">Working out the plan...</div>
+              <div className="flex flex-col items-center gap-3 mt-14">
+                <Loader2 size={30} className="animate-spin green-text" />
+                <div className="font-mono text-xs tracking-widest text-faint">WORKING OUT THE PLAN...</div>
               </div>
             ) : guideError ? (
               <div className="flex flex-col gap-4 mt-8 items-center">
-                <div className="w-full bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-4 text-sm sans-font flex gap-2">
-                  <AlertTriangle size={18} className="flex-shrink-0 text-[#b0332b]" />
+                <div className="panel w-full p-4 text-sm flex gap-2" style={{ borderColor: "rgba(251,113,133,.3)" }}>
+                  <AlertTriangle size={18} className="flex-shrink-0 text-rose" />
                   <span>{guideError}</span>
                 </div>
-                <button
-                  onClick={runGuide}
-                  className="flex items-center gap-2 py-3 px-6 rounded-lg sans-font font-semibold text-white"
-                  style={{ background: "#1a1a1a" }}
-                >
-                  <RefreshCw size={16} /> Try again
-                </button>
+                <button onClick={runGuide} className="gbtn flex items-center gap-2 py-3 px-6 rounded-xl font-bold text-sm"><RefreshCw size={16} /><span>Try again</span></button>
               </div>
             ) : (
               <>
-                <div className="sans-font text-[15px] leading-relaxed whitespace-pre-wrap">{guideText}</div>
+                <div className="text-[15px] leading-relaxed whitespace-pre-wrap text-mist">{guideText}</div>
                 {guideTruncated && (
-                  <div className="mt-4 bg-[#fff7e0] border-2 border-[#b06f00] rounded-lg p-3 text-sm sans-font flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <AlertTriangle size={18} className="flex-shrink-0 text-[#b06f00]" />
-                      <span>
-                        This guide got cut off — the last step may be incomplete. Don't start work
-                        based on a half step.
-                      </span>
-                    </div>
-                    <button
-                      onClick={runGuide}
-                      className="self-start flex items-center gap-2 py-2 px-4 rounded-lg sans-font font-semibold text-white text-sm"
-                      style={{ background: "#b06f00" }}
-                    >
-                      <RefreshCw size={14} /> Reload the full guide
-                    </button>
+                  <div className="mt-4 rounded-xl p-3 text-sm flex flex-col gap-2" style={{ background: "rgba(251,191,36,.08)", border: "1px solid rgba(251,191,36,.3)" }}>
+                    <div className="flex gap-2"><AlertTriangle size={17} className="flex-shrink-0" style={{ color: "#FBBF24" }} /><span>This guide got cut off — the last step may be incomplete. Don't start based on a half step.</span></div>
+                    <button onClick={runGuide} className="self-start flex items-center gap-2 py-2 px-4 rounded-lg font-bold text-white text-xs" style={{ background: "#FBBF24", color: "#1a1a1a" }}><RefreshCw size={13} /> Reload the full guide</button>
                   </div>
                 )}
               </>
             )}
           </div>
+          <TabBar />
         </>
       )}
 
-      {/* LISTING */}
-      {screen === "listing" && (
+      {/* ============ INVENTORY / NUMBERS ============ */}
+      {screen === "inventory" && (
         <>
-          <TopBar title="List It" onBack={() => setScreen("result")} />
-          <div className="flex-1 overflow-y-auto px-5 py-5">
-            {listingLoading ? (
-              <div className="flex flex-col items-center gap-3 mt-12">
-                <Loader2 size={32} className="animate-spin" color="#b06f00" />
-                <div className="sans-font text-[#4a4a4a]">Writing the listing...</div>
-              </div>
-            ) : listing ? (
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className="text-xs sans-font text-[#4a4a4a] uppercase tracking-wide">Title</label>
-                  <input
-                    value={listing.title}
-                    onChange={(e) => setListing({ ...listing, title: e.target.value })}
-                    className="w-full mt-1 bg-white border-2 border-[#1a1a1a] rounded-lg px-3 py-2.5 sans-font font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs sans-font text-[#4a4a4a] uppercase tracking-wide">Description</label>
-                  <textarea
-                    value={listing.description}
-                    onChange={(e) => setListing({ ...listing, description: e.target.value })}
-                    rows={4}
-                    className="w-full mt-1 bg-white border-2 border-[#1a1a1a] rounded-lg px-3 py-2.5 sans-font resize-none"
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="text-xs sans-font text-[#4a4a4a] uppercase tracking-wide">Price</label>
-                    <input
-                      value={String(listing.price)}
-                      onChange={(e) => setListing({ ...listing, price: e.target.value })}
-                      className="w-full mt-1 bg-white border-2 border-[#1a1a1a] rounded-lg px-3 py-2.5 sans-font font-semibold"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs sans-font text-[#4a4a4a] uppercase tracking-wide">Platform</label>
-                    <div className="mt-1 bg-[#e8e2d3] rounded-lg px-3 py-2.5 sans-font">{listing.platform}</div>
-                  </div>
-                </div>
-                {listing.photoTips && <div className="text-sm sans-font text-[#4a4a4a] italic">Photo tip: {listing.photoTips}</div>}
-                {listing.safetyDisclaimer && (
-                  <div className="bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-3 text-sm sans-font">{listing.safetyDisclaimer}</div>
-                )}
-                <button
-                  onClick={copyListing}
-                  className="flex items-center justify-center gap-2 py-3.5 rounded-lg border-2 border-[#1a1a1a] sans-font font-semibold"
-                >
-                  {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy listing"}
-                </button>
-                <button
-                  onClick={() => setSaleModal(true)}
-                  className="py-3.5 rounded-lg sans-font font-semibold text-white"
-                  style={{ background: "#24702f" }}
-                >
-                  Mark as sold
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4 mt-8 items-center">
-                <div className="w-full bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-4 text-sm sans-font flex gap-2">
-                  <AlertTriangle size={18} className="flex-shrink-0 text-[#b0332b]" />
-                  <span>{listingError || "Couldn't build the listing."}</span>
-                </div>
-                <button
-                  onClick={runListing}
-                  className="flex items-center gap-2 py-3 px-6 rounded-lg sans-font font-semibold text-white"
-                  style={{ background: "#1a1a1a" }}
-                >
-                  <RefreshCw size={16} /> Try again
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* PROFIT TRACKER */}
-      {screen === "tracker" && (
-        <>
-          <TopBar title="Your Numbers" onBack={() => setScreen("scan")} />
-          <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
-            <div className="text-center py-6 bg-white rounded-xl border-2 border-[#1a1a1a]">
-              <div className="huge-font text-4xl">${totalProfit.toFixed(0)}</div>
-              <div className="sans-font text-sm text-[#4a4a4a] mt-1">total tracked cash</div>
+          <TopBar title="Your Numbers" onBack={() => setScreen("home")} />
+          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+            <div className="panel relative p-6 text-center overflow-hidden">
+              <div className="cash-halo" />
+              <div className="relative font-mono font-extrabold text-[42px] green-text">${cash.toFixed(0)}</div>
+              <div className="relative text-xs text-faint mt-1">real cash collected</div>
             </div>
             <div className="flex gap-3">
-              <div className="flex-1 text-center py-4 bg-white rounded-xl border-2 border-[#1a1a1a]">
-                <div className="display-font text-xl">${weekProfit.toFixed(0)}</div>
-                <div className="text-xs sans-font text-[#4a4a4a]">this week</div>
-              </div>
-              <div className="flex-1 text-center py-4 bg-white rounded-xl border-2 border-[#1a1a1a]">
-                <div className="display-font text-lg truncate px-1">{bestCategory ? bestCategory[0] : "—"}</div>
-                <div className="text-xs sans-font text-[#4a4a4a]">best category</div>
-              </div>
+              <div className="panel flex-1 p-3.5 text-center"><div className="font-mono font-bold text-base text-white">${est.low}–${est.high}</div><div className="text-[10px] text-faint mt-0.5">est. on hand</div></div>
+              <div className="panel flex-1 p-3.5 text-center"><div className="font-mono font-bold text-base text-white">{onHand.length}</div><div className="text-[10px] text-faint mt-0.5">items on hand</div></div>
             </div>
 
-            {isPro ? (
-              <div className="bg-[#1a1a1a] text-white rounded-xl p-4 sans-font">
-                <div className="flex items-center gap-2 font-semibold">
-                  <Zap size={16} color="#f2c94c" /> CashScan Pro — active
-                </div>
-                <div className="text-sm text-white/80 mt-1">
-                  Unlimited scans. Thanks for keeping this tool alive.
-                </div>
-                <button
-                  onClick={managePlan}
-                  disabled={proBusy === "portal"}
-                  className="mt-3 flex items-center gap-2 text-sm font-semibold underline text-white/90 disabled:opacity-50"
-                >
-                  <Settings size={14} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
-                </button>
-              </div>
-            ) : proGateActive ? (
-              <div className="bg-[#1a1a1a] text-white rounded-xl p-4 sans-font">
-                <div className="font-semibold mb-1">
-                  {gateReason === "profit"
-                    ? `You've cleared $${totalProfit.toFixed(0)} in tracked cash. 🎉`
-                    : `You've put ${SCAN_TRIGGER} scans to work.`}
-                </div>
-                <div className="text-sm text-white/80">
-                  {gateReason === "profit"
-                    ? "CashScan stays free until it earns you $100 — and it has. Pro keeps the scans coming. Your ledger stays free forever either way."
-                    : `The free deal is $100 tracked or ${SCAN_TRIGGER} scans, whichever comes first. Pro keeps the scans coming — your ledger and past results stay free forever either way.`}
-                </div>
-                <button
-                  onClick={() => setScreen("pro")}
-                  className="mt-3 w-full py-2.5 rounded-lg huge-font text-sm tracking-wide"
-                  style={{ background: "#f2c94c", color: "#1a1a1a" }}
-                >
-                  SEE PRO
-                </button>
-              </div>
-            ) : scanCount >= Math.floor(SCAN_TRIGGER / 2) ? (
-              <div className="bg-white rounded-xl border border-[#d8d2c3] p-3.5 sans-font text-sm text-[#4a4a4a]">
-                Free scans used: <b className="text-[#1a1a1a]">{scanCount} of {SCAN_TRIGGER}</b>. The
-                deal: free until $100 tracked cash or {SCAN_TRIGGER} scans — whichever lands first.
-              </div>
-            ) : null}
-
-            <div className="sans-font">
-              <div className="text-xs uppercase tracking-wide text-[#4a4a4a] mb-2">Recent sales</div>
-              {ledger.length === 0 ? (
-                <div className="text-sm text-[#8a8275]">Nothing tracked yet. Sell your first item to start your numbers.</div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {[...ledger].reverse().map((l) =>
-                    pendingDelete === l.id ? (
-                      <div key={l.id} className="flex items-center justify-between bg-[#fdecea] border border-[#b0332b] rounded-lg px-3 py-2.5 gap-2">
-                        <span className="text-sm">Remove "{l.item}"?</span>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => deleteEntry(l.id)}
-                            className="text-sm font-semibold text-white rounded px-3 py-1.5"
-                            style={{ background: "#b0332b" }}
-                          >
-                            Remove
-                          </button>
-                          <button
-                            onClick={() => setPendingDelete(null)}
-                            className="text-sm font-semibold rounded px-3 py-1.5 border border-[#1a1a1a]"
-                          >
-                            Keep
-                          </button>
-                        </div>
+            {inventory.length === 0 ? (
+              <div className="panel p-5 text-sm text-faint">Empty so far. Scan something and tap "Add to inventory" — the pile starts here.</div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {inventory.map((i) =>
+                  pendingDelete === i.id ? (
+                    <div key={i.id} className="panel flex items-center justify-between px-4 py-3 gap-2" style={{ borderColor: "rgba(251,113,133,.35)" }}>
+                      <span className="text-sm">Remove "{i.item}"?</span>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button onClick={() => deleteItem(i.id)} className="text-xs font-bold rounded-lg px-3 py-1.5" style={{ background: "#FB7185", color: "#1a0a0c" }}>Remove</button>
+                        <button onClick={() => setPendingDelete(null)} className="text-xs font-bold rounded-lg px-3 py-1.5 border border-white/15 text-mist">Keep</button>
                       </div>
-                    ) : (
-                      <div key={l.id} className="flex items-center justify-between bg-white rounded-lg border border-[#d8d2c3] px-3 py-2.5 gap-2">
-                        <span className="truncate">{l.item}</span>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <span className="font-semibold">${l.profit.toFixed(0)}</span>
-                          {/* Fat-fingered $4000 instead of $40 shouldn't corrupt
-                              your numbers forever. */}
-                          <button
-                            onClick={() => setPendingDelete(l.id)}
-                            className="p-1 text-[#8a8275]"
-                            aria-label={`Remove ${l.item}`}
-                          >
-                            <X size={16} />
-                          </button>
+                    </div>
+                  ) : (
+                    <div key={i.id} className="panel px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm text-white font-medium truncate">{i.item}</div>
+                          <div className="text-[11px] text-faint mt-0.5">
+                            {i.status === "sold" || i.status === "scrapped" ? `${i.status.toUpperCase()} · $${(i.cashedFor || 0).toFixed(0)}` : `scrap $${i.scrapLow}–$${i.scrapHigh} · resale $${i.resaleLow}–$${i.resaleHigh}`}
+                          </div>
                         </div>
+                        <button onClick={() => setPendingDelete(i.id)} className="p-1 flex-shrink-0" aria-label={`Remove ${i.item}`}><X size={16} className="text-faint" /></button>
                       </div>
-                    )
-                  )}
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => setScreen("scan")}
-              className="py-3.5 rounded-lg huge-font text-lg text-white"
-              style={{ background: "#1a1a1a" }}
-            >
-              SCAN ANOTHER
-            </button>
+                      {i.status === "have" && (
+                        <div className="flex gap-2 mt-2.5">
+                          <button onClick={() => setCashModal({ id: i.id, as: "sold" })} className="gbtn flex-1 py-2 rounded-lg text-[11px] font-bold"><span>SOLD IT</span></button>
+                          <div className="cbtn flex-1 h-8"><button onClick={() => setCashModal({ id: i.id, as: "scrapped" })} className="cbtn-in w-full h-full text-[11px]">SCRAPPED IT</button></div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+            <div className="text-[11px] text-faint text-center pb-4">Your inventory lives on this phone only. We can't see it.</div>
           </div>
+          <TabBar />
         </>
       )}
 
-      {/* PRO */}
+      {/* ============ PRO ============ */}
       {screen === "pro" && (
         <>
-          <TopBar title="CashScan Pro" onBack={() => setScreen("scan")} />
-          <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
+          <TopBar title="JunkGenius Pro" onBack={() => setScreen("home")} />
+          <div className="flex-1 overflow-y-auto px-5 py-4">
             {isPro ? (
               <div className="flex flex-col items-center text-center gap-3 mt-8">
-                <Zap size={48} color="#b06f00" />
-                <div className="display-font text-2xl">You're Pro. ⚡</div>
-                <div className="sans-font text-sm text-[#4a4a4a] max-w-xs">
-                  Unlimited scans — and your few bucks keep this tool alive for the next person
-                  digging their way out. Thank you.
+                <div className="bezel rounded-full" style={{ width: 64, height: 64 }}><div className="bezel-face green"><Zap size={28} /></div></div>
+                <div className="font-disp font-bold text-2xl text-white">You're Pro. ⚡</div>
+                <div className="text-sm text-faint max-w-xs">Unlimited scans and guides — and your few bucks keep this tool alive for the next person digging out. Thank you.</div>
+                <button onClick={resetScan} className="gbtn w-full max-w-xs py-4 mt-2 rounded-2xl font-disp font-bold text-lg"><span>SCAN SOMETHING</span></button>
+                <div className="cbtn w-full max-w-xs h-12">
+                  <button onClick={managePlan} disabled={proBusy === "portal"} className="cbtn-in w-full h-full flex items-center gap-2 text-sm font-bold disabled:opacity-50">
+                    <Settings size={15} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
+                  </button>
                 </div>
-                <button
-                  onClick={() => setScreen("scan")}
-                  className="w-full max-w-xs py-4 mt-2 rounded-xl huge-font text-lg tracking-wide"
-                  style={{ background: "#1a1a1a", color: "#f2ede3" }}
-                >
-                  SCAN SOMETHING
-                </button>
-                <button
-                  onClick={managePlan}
-                  disabled={proBusy === "portal"}
-                  className="flex items-center gap-2 py-3 px-5 rounded-lg border-2 border-[#1a1a1a] sans-font font-semibold text-sm disabled:opacity-50"
-                >
-                  <Settings size={15} /> {proBusy === "portal" ? "Opening…" : "Manage / cancel subscription"}
-                </button>
-                {proError && (
-                  <div className="w-full bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-3 text-sm sans-font">{proError}</div>
-                )}
+                {proError && <div className="panel w-full p-3 text-sm" style={{ borderColor: "rgba(251,113,133,.3)" }}>{proError}</div>}
               </div>
             ) : (
-              <>
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <Zap size={32} color="#b06f00" className="flex-shrink-0" />
-                  <div className="display-font text-2xl leading-tight">
-                    {gateReason === "scans"
-                      ? `${SCAN_TRIGGER} scans on the house.`
-                      : `This app made you $${totalProfit.toFixed(0)}.`}
+                  <div className="bezel rounded-2xl" style={{ width: 48, height: 48 }}><div className="bezel-face green"><Zap size={22} /></div></div>
+                  <div className="font-disp font-bold text-xl text-white leading-tight">
+                    {gateReason === "cash" ? `JunkGenius helped you collect $${cash.toFixed(0)}.` : proGateActive ? `${AI_TRIGGER} AI actions on the house.` : "Free until it's made you $100."}
                   </div>
                 </div>
-                <div className="sans-font text-[15px] text-[#4a4a4a]">
-                  {gateReason === "scans"
-                    ? `The deal: CashScan is free until it's either made you $100 in tracked cash or run ${SCAN_TRIGGER} scans — whichever lands first. You hit the scans. Every scan costs us real money to run, so Pro keeps them coming — for less than one cup of gas-station coffee a week.`
-                    : "CashScan stays free until it's put $100 in your pocket. You're past that. Pro keeps the scans coming — for less than one cup of gas-station coffee a week."}
+                <div className="text-[13.5px] text-mist">
+                  The deal: free until you've collected $100 or used {AI_TRIGGER} AI actions — whichever lands first{proGateActive ? " — you're there." : "."} Pro keeps it rolling for less than a cup of gas-station coffee a week.
                 </div>
-
-                <div className="bg-white rounded-xl border-2 border-[#1a1a1a] p-4 sans-font text-sm">
-                  <div className="font-semibold mb-2">Free forever, Pro or not:</div>
-                  <ul className="flex flex-col gap-1 text-[#4a4a4a] list-disc pl-5">
-                    <li>Your numbers and your sales ledger</li>
-                    <li>Every result you've already scanned</li>
+                <div className="panel p-4 text-sm">
+                  <div className="text-white font-semibold mb-2">Free forever, Pro or not:</div>
+                  <ul className="flex flex-col gap-1 text-faint list-disc pl-5">
+                    <li>Your inventory and every dollar you log</li>
                     <li>Canceling — two taps, no phone calls</li>
                   </ul>
                 </div>
-
-                <button
-                  onClick={() => buyPlan("monthly")}
-                  disabled={proBusy !== ""}
-                  className="w-full py-4 rounded-xl huge-font text-lg tracking-wide flex items-center justify-center gap-2 disabled:opacity-60"
-                  style={{ background: "#1a1a1a", color: "#f2ede3" }}
-                >
-                  {proBusy === "monthly" ? <Loader2 size={20} className="animate-spin" /> : null}
-                  {PRICE_MONTHLY_LABEL}
+                <button onClick={() => buyPlan("monthly")} disabled={proBusy !== ""} className="gbtn w-full py-4 rounded-2xl font-disp font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-60">
+                  {proBusy === "monthly" && <Loader2 size={18} className="animate-spin" />} <span>{PRICE_MONTHLY_LABEL}</span>
                 </button>
-                <button
-                  onClick={() => buyPlan("annual")}
-                  disabled={proBusy !== ""}
-                  className="w-full py-4 rounded-xl huge-font text-lg tracking-wide flex items-center justify-center gap-2 text-white disabled:opacity-60"
-                  style={{ background: "#24702f" }}
-                >
-                  {proBusy === "annual" ? <Loader2 size={20} className="animate-spin" /> : null}
-                  {PRICE_ANNUAL_LABEL} <span className="sans-font text-sm font-semibold">— save 50%</span>
-                </button>
-
-                {proNotice && (
-                  <div className="bg-[#fff7e0] border-2 border-[#b06f00] rounded-lg p-3 text-sm sans-font">{proNotice}</div>
-                )}
-                {proError && (
-                  <div className="bg-[#fdecea] border-2 border-[#b0332b] rounded-lg p-3 text-sm sans-font">{proError}</div>
-                )}
-
-                <button
-                  onClick={checkPayment}
-                  disabled={proBusy !== ""}
-                  className="w-full py-3.5 rounded-lg border-2 border-[#1a1a1a] sans-font font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {proBusy === "check" ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                  I finished paying — check now
-                </button>
-
-                <div className="mt-2 pt-4 border-t border-[#d8d2c3] sans-font">
-                  <div className="text-sm font-semibold mb-1">Already Pro on another phone?</div>
-                  <div className="text-sm text-[#4a4a4a] mb-2">
-                    Enter the email from your receipt and we'll move it over.
-                  </div>
-                  <input
-                    value={restoreEmail}
-                    onChange={(e) => setRestoreEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    inputMode="email"
-                    autoCapitalize="none"
-                    className="w-full bg-white border-2 border-[#1a1a1a] rounded-lg px-3 py-2.5 sans-font mb-2"
-                  />
-                  <button
-                    onClick={doRestore}
-                    disabled={proBusy !== "" || restoreEmail.trim() === ""}
-                    className="w-full py-3 rounded-lg sans-font font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
-                    style={{ background: "#275f8f" }}
-                  >
-                    {proBusy === "restore" ? <Loader2 size={16} className="animate-spin" /> : null}
-                    Restore my Pro
+                <div className="cbtn h-14">
+                  <button onClick={() => buyPlan("annual")} disabled={proBusy !== ""} className="cbtn-in w-full h-full flex items-center justify-center gap-2 font-disp font-bold text-base disabled:opacity-60">
+                    {proBusy === "annual" && <Loader2 size={18} className="animate-spin" />} {PRICE_ANNUAL_LABEL} <span className="text-xs font-sans font-semibold text-faint">— save 50%</span>
                   </button>
                 </div>
-
-                <div className="text-xs sans-font text-[#8a8275] text-center mt-1">
-                  Payments run through Stripe in your browser — card details never touch this app.
-                  Cancel anytime. Your ledger lives on your phone and stays yours.
+                {proNotice && <div className="panel p-3 text-sm" style={{ borderColor: "rgba(251,191,36,.3)" }}>{proNotice}</div>}
+                {proError && <div className="panel p-3 text-sm" style={{ borderColor: "rgba(251,113,133,.3)" }}>{proError}</div>}
+                <div className="cbtn h-12">
+                  <button onClick={checkPayment} disabled={proBusy !== ""} className="cbtn-in w-full h-full flex items-center justify-center gap-2 text-sm font-bold disabled:opacity-60">
+                    {proBusy === "check" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} I finished paying — check now
+                  </button>
                 </div>
-              </>
+                <div className="pt-3 border-t border-white/[.07]">
+                  <div className="text-sm text-white font-semibold mb-1">Already Pro on another phone?</div>
+                  <div className="text-xs text-faint mb-2">Enter the email from your receipt and we'll move it over.</div>
+                  <input value={restoreEmail} onChange={(e) => setRestoreEmail(e.target.value)} placeholder="you@example.com" inputMode="email" autoCapitalize="none"
+                    className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-abright/50 mb-2" />
+                  <button onClick={doRestore} disabled={proBusy !== "" || restoreEmail.trim() === ""} className="gbtn w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                    {proBusy === "restore" && <Loader2 size={15} className="animate-spin" />} <span>Restore my Pro</span>
+                  </button>
+                </div>
+                <div className="text-[11px] text-faint text-center pb-4">Payments run through Stripe in your browser — card details never touch this app. Cancel anytime.</div>
+              </div>
             )}
           </div>
+          <TabBar />
         </>
       )}
 
-      {/* SALE MODAL */}
-      {saleModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setSaleModal(false)}>
-          <div className="w-full bg-[#f2ede3] rounded-t-2xl p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="display-font text-xl mb-3">What'd it sell for?</div>
-            <input
-              autoFocus
-              value={salePrice}
-              onChange={(e) => setSalePrice(e.target.value)}
-              placeholder="40"
-              inputMode="decimal"
-              className="w-full bg-white border-2 border-[#1a1a1a] rounded-lg px-3 py-3 text-lg sans-font mb-2"
-            />
-            {salePrice.trim() !== "" && !priceValid && (
-              <div className="text-sm sans-font text-[#b0332b] mb-2">
-                Just the number — like 40 or 12.50
-              </div>
-            )}
-            <button
-              onClick={confirmSale}
-              disabled={!priceValid}
-              className="w-full py-3.5 rounded-lg text-white font-semibold sans-font disabled:opacity-40"
-              style={{ background: "#24702f" }}
-            >
-              Save it
+      {/* ============ CASH MODAL ============ */}
+      {cashModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end z-50" onClick={() => setCashModal(null)}>
+          <div className="w-full bg-ink2 border-t border-white/10 rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="font-disp font-bold text-xl text-white mb-1">{cashModal.as === "sold" ? "What'd it sell for?" : "What'd the yard pay?"}</div>
+            <div className="text-xs text-faint mb-3">Just the number — like 40 or 12.50</div>
+            <input autoFocus value={cashPrice} onChange={(e) => setCashPrice(e.target.value)} placeholder="40" inputMode="decimal"
+              className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3.5 text-lg text-white mb-2 outline-none focus:border-abright/50" />
+            {cashPrice.trim() !== "" && !priceValid && <div className="text-sm mb-2 text-rose">Numbers only — like 40 or 12.50</div>}
+            <button onClick={confirmCash} disabled={!priceValid} className="gbtn w-full py-4 rounded-2xl font-disp font-bold disabled:opacity-40 flex items-center justify-center gap-2">
+              <DollarSign size={18} /> <span>LOG THE CASH</span>
             </button>
           </div>
         </div>
